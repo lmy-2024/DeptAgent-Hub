@@ -83,6 +83,37 @@ def test_tables_match_spec(db):
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'"
     )["sql"].upper()
     assert "UNIQUE(OWNER_USER_ID, AGENT_KEY)" in agents_sql
+    # usage_daily（T1.7 用量通道，SPEC 7 章逐列核对）
+    assert set(_table_columns(db, "usage_daily")) == {
+        "id",
+        "stat_date",
+        "user_id",
+        "agent_id",
+        "team",
+        "provider_id",
+        "model",
+        "prompt_tokens",
+        "completion_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "call_count",
+        "source",
+    }
+    usage_sql = db.query_one(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='usage_daily'"
+    )["sql"].upper()
+    assert "UNIQUE(STAT_DATE, USER_ID, AGENT_ID, PROVIDER_ID, MODEL, SOURCE)" in usage_sql
+
+
+def test_usage_report_view_exists(db):
+    """T1.7：usage_report VIEW（7.2 双 source 合并口径）已建且可查。"""
+    view = db.query_one(
+        "SELECT sql FROM sqlite_master WHERE type='view' AND name='usage_report'"
+    )
+    assert view is not None
+    assert "SOURCE = 'GATEWAY'" in view["sql"].upper()
+    # 空表可查（报表一律走 VIEW，禁止直查 usage_daily）
+    assert db.query_all("SELECT * FROM usage_report") == []
 
 
 def test_indexes_exist(db):
@@ -94,6 +125,8 @@ def test_indexes_exist(db):
         "idx_audit_log_actor",
         "idx_agents_owner",
         "idx_agents_def",
+        "idx_usage_daily_rpt",
+        "idx_usage_daily_team",
     } <= names
 
 

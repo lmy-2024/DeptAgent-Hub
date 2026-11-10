@@ -207,5 +207,59 @@ def _store_agents(
 def _store_usage(
     conn: sqlite3.Connection, device: sqlite3.Row, usage: list[UsagePayload]
 ) -> None:
-    """用量入库（T1.7 交付：增量重传 + usage_daily UPSERT）。"""
-    _ = conn, device, usage
+    """用量入库（T1.7：8.1 归属解析 + 7.1 UPSERT 白名单 + team 快照）。
+
+    - 归属（8.1）：payload.agent_key 按上报员工本人在 agents 台账中
+      解析为 agents.id（客户端本地标识仅员工内唯一，跨员工同名 key
+      不可混）；None / 未登记 key → agent_id=0 哨兵（未归属用量；
+      SQLite UNIQUE 不判 NULL，不可用 NULL）；
+    - provider_id / model None 归一空串：UNIQUE 维度列若为 NULL 则
+      同维度行永不判重、重复堆积；
+    - 白名单（7.1）：客户端仅可覆盖五计数（全量覆盖语义，配合 3.6
+      当日重传）；team 仅 INSERT 首写快照（调岗不重算历史）；
+      user_id / agent_id / source 由服务端固定（'client'）。
+    """
+    user_id = device["user_id"]
+    if user_id is None:
+        return  # 绑定流程保证设备归属员工；防御分支（无归属不落用量）
+    team_row = conn.execute(
+        "SELECT team FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    team_snapshot = team_row["team"] if team_row is not None else None
+    key_to_id = {
+        row["agent_key"]: row["id"]
+        for row in conn.execute(
+            "SELECT id, agent_key FROM agents WHERE owner_user_id = ?", (user_id,)
+        ).fetchall()
+    }
+    for row in usage:
+        agent_id = key_to_id.get(row.agent_key or "", 0)
+        conn.execute(
+            """
+            INSERT INTO usage_daily (
+                stat_date, user_id, agent_id, team, provider_id, model,
+                prompt_tokens, completion_tokens, cache_read_tokens,
+                cache_write_tokens, call_count, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'client')
+            ON CONFLICT(stat_date, user_id, agent_id, provider_id, model, source)
+            DO UPDATE SET
+                prompt_tokens = excluded.prompt_tokens,
+                completion_tokens = excluded.completion_tokens,
+                cache_read_tokens = excluded.cache_read_tokens,
+                cache_write_tokens = excluded.cache_write_tokens,
+                call_count = excluded.call_count
+            """,
+            (
+                row.stat_date,
+                user_id,
+                agent_id,
+                team_snapshot,
+                row.provider_id or "",
+                row.model or "",
+                row.prompt_tokens,
+                row.completion_tokens,
+                row.cache_read_tokens,
+                row.cache_write_tokens,
+                row.call_count,
+            ),
+        )

@@ -41,6 +41,10 @@ class AgentReader(Protocol):
         """读智能体台账清单（3.4 ②字段：agent_key/name/description/status）。"""
         ...
 
+    def read_usage(self) -> dict[str, list[dict]]:
+        """读按日聚合的 Token 用量（3.4 ③六项计数）。返回 {date: [row, ...]}。"""
+        ...
+
 
 def detect_format() -> tuple[str | None, AgentReader | None]:
     """格式探测 + 降级判定：返回 (格式族标签, Reader)。

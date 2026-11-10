@@ -284,3 +284,159 @@ def test_report_invalid_body_returns_validation_error(client, device_token):
     )
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "validation_error"
+
+
+def test_report_usage_upsert_semantics(client, db, device_token):
+    """T1.7：用量 UPSERT 归属解析 + 7.1 白名单（全量覆盖）+ team 快照。"""
+    owner_id = db.query_one("SELECT id FROM users WHERE employee_no = 'T001'")["id"]
+
+    body = _report(1)
+    body["agents"] = [{"agent_key": "default", "name": "Default"}]
+    body["usage"] = [
+        {
+            "stat_date": "2026-11-10",
+            "agent_key": "default",
+            "provider_id": "dashscope",
+            "model": "qwen-max",
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "cache_read_tokens": 10,
+            "cache_write_tokens": 5,
+            "call_count": 2,
+        },
+        {
+            "stat_date": "2026-11-10",
+            "agent_key": None,  # 无归属 → 哨兵 0（8.1）
+            "provider_id": "deepseek",
+            "model": "deepseek-v4",
+            "prompt_tokens": 7,
+        },
+    ]
+    resp = client.post(
+        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
+    )
+    assert resp.status_code == 200, resp.text
+
+    agent_db_id = db.query_one(
+        "SELECT id FROM agents WHERE agent_key = 'default' AND owner_user_id = ?",
+        (owner_id,),
+    )["id"]
+    rows = db.query_all(
+        "SELECT * FROM usage_daily WHERE user_id = ? ORDER BY agent_id", (owner_id,)
+    )
+    assert len(rows) == 2
+    r_unowned, r_owned = rows  # ORDER BY agent_id：哨兵 0 排前
+    # 归属解析：同包 agents 段先行入库，usage 按本人台账解析 agents.id
+    assert r_owned["agent_id"] == agent_db_id
+    assert r_owned["team"] == "财务科"  # INSERT 首写科室快照（7.1）
+    assert r_owned["source"] == "client"  # source 由服务端固定
+    assert r_owned["prompt_tokens"] == 100
+    assert r_owned["completion_tokens"] == 50
+    assert r_owned["cache_read_tokens"] == 10
+    assert r_owned["cache_write_tokens"] == 5
+    assert r_owned["call_count"] == 2
+    assert r_unowned["agent_id"] == 0  # agent_key=None → 哨兵
+    assert r_unowned["prompt_tokens"] == 7
+    assert r_unowned["completion_tokens"] == 0  # 计数缺省 0（宽松校验）
+
+    # 当日全量重传（3.6）：五计数全量覆盖；调岗后 team 不重算（7.1 快照）
+    db.execute("UPDATE users SET team = '市场科' WHERE id = ?", (owner_id,))
+    body2 = _report(2)
+    body2["usage"] = [
+        {
+            "stat_date": "2026-11-10",
+            "agent_key": "default",
+            "provider_id": "dashscope",
+            "model": "qwen-max",
+            "prompt_tokens": 200,
+            "call_count": 3,
+        },
+    ]
+    resp2 = client.post(
+        "/api/v1/telemetry/report", json=body2, headers=_auth(device_token)
+    )
+    assert resp2.status_code == 200
+    rows2 = db.query_all(
+        "SELECT * FROM usage_daily WHERE user_id = ? ORDER BY agent_id", (owner_id,)
+    )
+    assert len(rows2) == 2  # 幂等不新增
+    d = rows2[1]
+    assert d["prompt_tokens"] == 200  # 全量覆盖（非累加/非 COALESCE）
+    assert d["call_count"] == 3
+    assert d["completion_tokens"] == 0  # 重传缺省计数覆盖旧值（客户端负责报全量）
+    assert d["team"] == "财务科"  # team 不在 UPDATE 白名单：调岗不重算历史
+
+
+def test_report_usage_owner_scoped_resolution(client, db, device_token):
+    """T1.7：归属解析仅限本人台账——他人 key 不解析（同名 key 不跨员工混）。"""
+    db.execute(
+        "INSERT INTO invitations (code, team, role, expires_at) VALUES (?, ?, ?, ?)",
+        ("INV-UT2", "财务科", "member", "2099-01-01T00:00:00+00:00"),
+    )
+    resp = client.post(
+        "/api/v1/bind",
+        json={
+            "invite_code": "INV-UT2",
+            "employee_no": "T002",
+            "device_info": {"name": "PC-T002"},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    # T001 台账里有 default；T002 未登记任何 key
+
+    body = _report(1)
+    body["agents"] = [{"agent_key": "default", "name": "Default"}]
+    client.post(
+        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
+    )
+
+    body2 = {
+        "device": {},
+        "seq": 1,
+        "agents": [],
+        "usage": [
+            {
+                "stat_date": "2026-11-10",
+                "agent_key": "default",  # 他人台账的 key → 不解析
+                "provider_id": "dashscope",
+                "model": "qwen-max",
+                "prompt_tokens": 1,
+            }
+        ],
+    }
+    second = client.post(
+        "/api/v1/telemetry/report", json=body2, headers=_auth(
+            resp.json()["device_token"]
+        )
+    )
+    assert second.status_code == 200, second.text
+
+    t002_id = db.query_one("SELECT id FROM users WHERE employee_no = 'T002'")["id"]
+    row = db.query_one(
+        "SELECT agent_id FROM usage_daily WHERE user_id = ?", (t002_id,)
+    )
+    assert row["agent_id"] == 0  # 未归属哨兵：T001 的 default 不被 T002 解析
+
+
+def test_usage_report_view_prefers_gateway(db):
+    """T1.7：7.2 双 source 合并——网关行优先、无网关回退 client。"""
+    _insert = (
+        "INSERT INTO usage_daily (stat_date, user_id, agent_id, team, provider_id,"
+        " model, prompt_tokens, completion_tokens, cache_read_tokens,"
+        " cache_write_tokens, call_count, source)"
+        " VALUES ('2026-11-10', 999, 0, NULL, ?, ?, ?, 0, 0, 0, 1, ?)"
+    )
+    db.execute(_insert, ("dashscope", "qwen-max", 100, "client"))
+    # 同维度 gateway 行：client 行被 VIEW 排除
+    db.execute(_insert, ("dashscope", "qwen-max", 300, "gateway"))
+    # 仅有 client 的维度：入选（阶段一常态，VIEW 退化为全量 client）
+    db.execute(_insert, ("deepseek", "deepseek-v4", 7, "client"))
+
+    rows = db.query_all(
+        "SELECT provider_id, source, prompt_tokens FROM usage_report"
+        " ORDER BY provider_id"
+    )
+    assert [(r["provider_id"], r["source"], r["prompt_tokens"]) for r in rows] == [
+        ("dashscope", "gateway", 300),  # gateway 优先，同维度 client 行排除
+        ("deepseek", "client", 7),  # 无 gateway → client 回退入选
+    ]

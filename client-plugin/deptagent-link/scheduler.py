@@ -24,7 +24,7 @@ from qwenpaw.plugins import PluginContext, StaleContextError
 import config
 from collectors.agents import collect_agents
 from collectors.heartbeat import collect_heartbeat
-from collectors.usage import collect_usage
+from collectors.usage import collect_usage, commit_usage_watermark
 from config import STORAGE_FILES
 from uploader import UploadStopped, reporting_stopped, send_report
 
@@ -123,23 +123,34 @@ async def _run_agents(context: PluginContext) -> None:
 
 
 async def _run_usage(context: PluginContext) -> None:
-    """用量通道（T1.7）：采集增量用量 → 上报（采集器当前占位返空）。"""
-    usage = await collect_usage(context)
-    await _send(context, device={}, agents=[], usage=usage)
+    """用量通道（T1.7）：采集增量用量 → 上报 → 成功后提交按日指纹水位。
+
+    增量算法（SPEC 3.6）：当日全量重传（服务端 UPSERT 覆盖）、历史日
+    仅指纹变化时重传；水位纪律：上报成功才 commit——失败/红灯不动
+    水位，下轮自动重传（丢数据风险 < 重复上报的幂等覆盖）；本地无新
+    数据本轮静默（在线信号由心跳通道维持）。
+    """
+    usage, fingerprints = await collect_usage(context)
+    if not usage:
+        return
+    if await _send(context, device={}, agents=[], usage=usage):
+        await commit_usage_watermark(context, fingerprints)
 
 
 async def _send(
     context: PluginContext, *, device: dict, agents: list, usage: list
-) -> None:
-    """通道公共尾部：红灯检查 → 上报 → 异常分类。
+) -> bool:
+    """通道公共尾部：红灯检查 → 上报 → 异常分类；返回是否上报成功。
 
     - 红灯（3.7 吊销/失效）：本轮直接跳过，循环存活等重新绑定；
     - UploadStopped：吊销确认（红灯已由 uploader 写入），记 info 不抛错；
     - UploadRetryable / 其他异常：继续上抛 → _channel_loop 记 warning
-      后下个周期重试（3.7 容错与降级链）。
+      后下个周期重试（3.7 容错与降级链）；
+    - 返回 False（红灯/吊销停报）：用量通道不提交增量水位（3.6：下轮
+      自动重传），心跳/台账通道忽略返回值。
     """
     if await reporting_stopped(context):
-        return
+        return False
     try:
         await send_report(context, device=device, agents=agents, usage=usage)
     except UploadStopped as exc:
@@ -148,4 +159,6 @@ async def _send(
                 "deptagent-link reporting stopped", fields={"reason": str(exc)}
             )
         except StaleContextError:
-            return
+            return False
+        return False
+    return True

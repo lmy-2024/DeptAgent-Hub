@@ -50,10 +50,11 @@
 - commit: ______
 
 ## T1.7 用量通道
-- [ ] collectors/usage.py：SPEC 3.4 ③六项计数（agent_key 可空；不上报 cache_eligible/observed 两字段）
-- [ ] 增量算法：当日全量重传（UPSERT 覆盖）、历史日仅变化时重传（SPEC 3.6）
-- [ ] usage_daily UPSERT：agent_key=null → agent_id=0 哨兵；team 列仅首写（SPEC 7.1、8.1）
-- [ ] 创建 usage_report VIEW，全部报表走它（SPEC 7.2）
+- [x] collectors/usage.py：SPEC 3.4 ③六项计数（agent_key 可空；不上报 cache_eligible/observed 两字段）——经 adapters/qwenpaw_2_3.py read_usage 读真机 token_usage.json（旧记录无 agent_id/cache_* 归一 None/0）
+- [x] 增量算法：当日全量重传（UPSERT 覆盖）、历史日仅变化时重传（SPEC 3.6）——按日 md5 指纹水位，上报成功才 commit（失败/红灯下轮自动重传）；90 天回灌窗口外不报不记水位（D3）
+- [x] usage_daily UPSERT：agent_key=null → agent_id=0 哨兵；team 列仅首写（SPEC 7.1、8.1）——归属解析仅限本人台账（跨员工同名 key 不混）、provider/model None 归一空串（UNIQUE 不判 NULL 防重复堆积）；迁移 004（表 + 双索引）+ 单测 54 全绿
+- [x] 创建 usage_report VIEW，全部报表走它（SPEC 7.2）——gateway 优先/无 gateway 回退 client，阶段一退化全量 client，VIEW 单测验证双 source 口径
+- [x] 端到端冒烟：真机今日 3 条（glm-5.2/deepseek-v4-pro/deepseek-v4.1-flash）上报落库 + 103 天前历史日（2026-07-30）窗口外跳过断言 + 两轮重传幂等（SMOKE T1.7 PASSED）
 - commit: ______
 
 ## 管理端页面

@@ -8,9 +8,9 @@
 ## 插件端
 
 ## T1.1 插件包骨架
-- [ ] plugin.json manifest：id=deptagent-link、type=general、entry、qwenpaw_version min=2.3.0、max=3.0.0、sdk 声明（SPEC 3.2 v0.6）
-- [ ] main.py 导出模块级 plugin 实例（SPEC 3.12 第 2 条）
-- [ ] `python -m qwenpaw.plugins.check ./deptagent-link` 静态校验通过
+- [x] plugin.json manifest：id=deptagent-link、type=general、entry、qwenpaw_version min=2.3.0、max=3.0.0、sdk 声明（SPEC 3.2 v0.6）
+- [x] main.py 导出模块级 plugin 实例（SPEC 3.12 第 2 条）
+- [x] `python -m qwenpaw.plugins.check ./deptagent-link` 静态校验通过（实测直跑 --runtime：ok=true、load/activation/cleanup 全 passed、compatible；Windows 需 PYTHONUTF8=1 见 status.md）
 - commit: ______
 
 ## T1.2 调度器与生命周期

@@ -1,0 +1,14 @@
+{
+  "id": "deptagent-link",
+  "name": "部门智通接入",
+  "version": "0.1.0",
+  "description": "将本机 QwenPaw 接入部门智通：上报心跳、智能体台账与 Token 用量",
+  "type": "general",
+  "entry": { "backend": "main.py" },
+  "qwenpaw_version": { "min": "2.3.0", "max": "3.0.0" },
+  "sdk": {
+    "version": "1.0.0",
+    "capabilities": ["storage", "logging", "config", "events", "commands", "providers"],
+    "secrets": ["device_token"]
+  }
+}

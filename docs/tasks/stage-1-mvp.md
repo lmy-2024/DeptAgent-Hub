@@ -66,9 +66,10 @@
 - commit: ______
 
 ## T1.9 员工与设备页
-- [ ] 员工列表：角色/科室/心跳灯/已暂停状态（SPEC 4.2）
-- [ ] 邀请码生成 UI（科室/角色/有效期/一次性，SPEC 5.2）
-- [ ] 设备令牌吊销操作（SPEC 4.2、5.2 一人多机子表）
+- [x] 员工列表：角色/科室/心跳灯/已暂停状态（SPEC 4.2）——服务端 GET /admin/employees 分页聚合（8.5 分页 + 排序白名单 + 科室/关键词过滤）+ 前端表格；心跳灯 = 任一设备 15 分钟内心跳（3×5min 周期 D2），暂停/停用徽标；lead 403 角色门槛 + 导航按角色裁剪（4.2）
+- [x] 邀请码生成 UI（科室/角色/有效期/一次性，SPEC 5.2）——POST/GET /admin/invitations；role 仅 member/lead（admin+ 不经邀请码）、DA-XXXXXXXX 8 位码、有效期 1–720h 缺省 72h；生成/使用状态列表 + 复制按钮；审计 invitation.create
+- [x] 设备令牌吊销操作（SPEC 4.2、5.2 一人多机子表）——GET /admin/employees/{id}/devices（token_hash 不出管理端）+ POST /admin/devices/{id}/revoke（幂等 + 审计 device.revoke）；浏览器实测吊销后设备变已吊销、活跃设备数 0/1、另设备不受影响；服务端验证吊销令牌上报即 401 token_revoked
+- [x] 配套修复：SPA 深链接 fallback（SPAStaticFiles：非 API 路径 404 → index.html，API 保持 8.5 JSON；Windows path 分隔符坑用 scope 原始路径判断）；浏览器 18/18 全过（含 lead 导航裁剪/直接访问 /employees 展示 403 文案）
 - commit: ______
 
 ## T1.10 智能体台账页

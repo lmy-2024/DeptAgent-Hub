@@ -15,11 +15,12 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
 
 from . import __version__
-from .api import accounts, auth, bind, telemetry
+from .api import accounts, auth, bind, employees, telemetry
 from .config import Settings, load_settings
 from .core.auth import LoginRateLimiter
 from .core.bind import BindRateLimiter
@@ -31,6 +32,23 @@ from .storage.migrations import migrate
 _DEFAULT_CONSOLE_DIST = Path(__file__).resolve().parents[3] / "console" / "dist"
 
 _HTTP_CODE_FALLBACK = {401: ("token_invalid", "未认证"), 403: ("forbidden_role", "无权限")}
+
+
+class SPAStaticFiles(StaticFiles):
+    """SPA 静态站点 + 深链接 fallback：非 API 路径未命中静态文件时回
+    index.html（React Router 客户端路由接管 /login、/employees 等；
+    控制台 401 全局跳转 window.location.assign("/login") 为整页导航，
+    T1.9 实测暴露后端 404 JSON 缺陷后补）。API 路径 404 保持 8.5 JSON。"""
+
+    async def get_response(self, path: str, scope) -> Response:
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # Windows 下 path 分隔符为 os.sep，前缀判断用原始 URL（scope.path）
+            url_path = scope.get("path", "")
+            if exc.status_code != 404 or url_path.startswith(("/api/", "/health")):
+                raise
+            return await super().get_response("index.html", scope)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -81,11 +99,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(accounts.router)
     app.include_router(bind.router)
     app.include_router(telemetry.router)
+    app.include_router(employees.router)
 
-    # ---- 管理控制台静态站点（T0.8：构建产物存在才挂载）----
+    # ---- 管理控制台静态站点（T0.8：构建产物存在才挂载；
+    # 深链接 fallback 由 SPAStaticFiles 提供，T1.9 补齐）----
 
     dist = Path(s.console_dist) if s.console_dist else _DEFAULT_CONSOLE_DIST
     if dist.is_dir():
-        app.mount("/", StaticFiles(directory=dist, html=True), name="console")
+        app.mount("/", SPAStaticFiles(directory=dist, html=True), name="console")
 
     return app

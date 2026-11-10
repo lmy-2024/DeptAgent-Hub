@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import AppLayout from "./pages/AppLayout";
+import EmployeesPage from "./pages/EmployeesPage";
 import LoginPage from "./pages/LoginPage";
 import { getSession, isSessionExpired } from "./api/client";
 
@@ -25,8 +26,20 @@ export default function App() {
           </RequireAuth>
         }
       >
-        {/* T1.9 员工与设备 / T1.10 台账 / T1.11 用量 / T1.12 驾驶舱 … */}
+        <Route index element={<HomePlaceholder />} />
+        <Route path="employees" element={<EmployeesPage />} />
+        {/* T1.10 台账 / T1.11 用量 / T1.12 驾驶舱 … */}
       </Route>
     </Routes>
+  );
+}
+
+/** 首页占位（驾驶舱 T1.12 交付后替换）。 */
+function HomePlaceholder() {
+  return (
+    <div>
+      <h2>部门智通 · 管理控制台</h2>
+      <p>驾驶舱建设中（T1.12）。请从导航进入已交付页面。</p>
+    </div>
   );
 }

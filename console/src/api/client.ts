@@ -108,3 +108,96 @@ export function login(employeeNo: string, password: string): Promise<LoginRespon
     { auth: false },
   );
 }
+
+// ---- 员工与设备管理（T1.9，SPEC 4.2 / 5.2 / 8.5 分页）----
+
+export interface EmployeeItem {
+  id: number;
+  employee_no: string;
+  name: string;
+  display_name: string | null;
+  role: string;
+  team: string | null;
+  status: string;
+  created_at: string | null;
+  device_count: number;
+  device_active_count: number;
+  last_heartbeat: string | null;
+  online: boolean;
+  reporting_paused_any: number;
+}
+
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ListEmployeesQuery {
+  page?: number;
+  page_size?: number;
+  team?: string;
+  q?: string;
+}
+
+export function listEmployees(query: ListEmployeesQuery = {}): Promise<Paged<EmployeeItem>> {
+  const search = new URLSearchParams();
+  if (query.page) search.set("page", String(query.page));
+  if (query.page_size) search.set("page_size", String(query.page_size));
+  if (query.team) search.set("team", query.team);
+  if (query.q) search.set("q", query.q);
+  const qs = search.toString();
+  return api(`/api/v1/admin/employees${qs ? `?${qs}` : ""}`);
+}
+
+export interface InvitationItem {
+  code: string;
+  team: string | null;
+  role: string | null;
+  expires_at: string | null;
+  used_by: number | null;
+  used_at: string | null;
+}
+
+export interface CreateInvitationInput {
+  team?: string | null;
+  role: "member" | "lead"; // admin+ 不经邀请码（SPEC 5.2）
+  expires_hours?: number;
+}
+
+export function createInvitation(body: CreateInvitationInput): Promise<InvitationItem> {
+  return api("/api/v1/admin/invitations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listInvitations(): Promise<{ items: InvitationItem[] }> {
+  return api("/api/v1/admin/invitations");
+}
+
+export interface DeviceItem {
+  id: number;
+  device_name: string | null;
+  os: string | null;
+  client_version: string | null;
+  plugin_version: string | null;
+  status: string;
+  reporting_paused: number | null;
+  last_seq: number;
+  last_format_probe: string | null;
+  last_heartbeat: string | null;
+  created_at: string | null;
+  online: boolean;
+}
+
+export function listDevices(userId: number): Promise<{ items: DeviceItem[] }> {
+  return api(`/api/v1/admin/employees/${userId}/devices`);
+}
+
+export function revokeDevice(
+  deviceId: number,
+): Promise<{ device_id: number; status: string; message: string }> {
+  return api(`/api/v1/admin/devices/${deviceId}/revoke`, { method: "POST" });
+}

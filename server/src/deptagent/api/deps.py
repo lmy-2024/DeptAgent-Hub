@@ -60,3 +60,14 @@ def require_super(user: CurrentUser) -> sqlite3.Row:
 
 
 SuperUser = Annotated[sqlite3.Row, Depends(require_super)]
+
+
+def require_admin(user: CurrentUser) -> sqlite3.Row:
+    """admin 门槛（SPEC 4.2：员工与设备/台账/报表页可见角色 admin / super，
+    权限包含向下兼容 super ≥ admin）。"""
+    if user["role"] not in ("admin", "super"):
+        raise ApiError(403, "forbidden_role", "仅管理员可访问")
+    return user
+
+
+AdminUser = Annotated[sqlite3.Row, Depends(require_admin)]

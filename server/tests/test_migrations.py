@@ -79,9 +79,9 @@ def test_tables_match_spec(db):
         "first_seen_at",
         "last_seen_at",
     }
-    agents_sql = db.query_one(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'"
-    )["sql"].upper()
+    agents_sql = db.query_one("SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'")[
+        "sql"
+    ].upper()
     assert "UNIQUE(OWNER_USER_ID, AGENT_KEY)" in agents_sql
     # usage_daily（T1.7 用量通道，SPEC 7 章逐列核对）
     assert set(_table_columns(db, "usage_daily")) == {
@@ -107,9 +107,7 @@ def test_tables_match_spec(db):
 
 def test_usage_report_view_exists(db):
     """T1.7：usage_report VIEW（7.2 双 source 合并口径）已建且可查。"""
-    view = db.query_one(
-        "SELECT sql FROM sqlite_master WHERE type='view' AND name='usage_report'"
-    )
+    view = db.query_one("SELECT sql FROM sqlite_master WHERE type='view' AND name='usage_report'")
     assert view is not None
     assert "SOURCE = 'GATEWAY'" in view["sql"].upper()
     # 空表可查（报表一律走 VIEW，禁止直查 usage_daily）

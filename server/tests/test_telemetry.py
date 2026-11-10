@@ -57,9 +57,7 @@ def _device_row(db, employee_no: str = "T001"):
 
 def test_report_heartbeat_stored(client, db, device_token):
     """T1.5：心跳 8 字段落 7.1 白名单列（last_seq 由 CAS 负责）。"""
-    resp = client.post(
-        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
-    )
+    resp = client.post("/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token))
     assert resp.status_code == 200, resp.text
     row = _device_row(db)
     assert row["device_name"] == "PC-T001"
@@ -73,16 +71,12 @@ def test_report_heartbeat_stored(client, db, device_token):
 
 def test_report_heartbeat_none_keeps_previous(client, db, device_token):
     """T1.5：宽松校验语义——device 段缺省时 None 字段不覆盖已有值。"""
-    first = client.post(
-        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
-    )
+    first = client.post("/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token))
     assert first.status_code == 200
 
     body = _report(2)
     body["device"] = {}  # 全字段 None
-    second = client.post(
-        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
-    )
+    second = client.post("/api/v1/telemetry/report", json=body, headers=_auth(device_token))
     assert second.status_code == 200
     row = _device_row(db)
     assert row["device_name"] == "PC-T001"  # 未被 None 覆盖
@@ -92,9 +86,7 @@ def test_report_heartbeat_none_keeps_previous(client, db, device_token):
     # reporting_paused 布尔整型化：True → 1
     body3 = _report(3)
     body3["device"]["reporting_paused"] = True
-    third = client.post(
-        "/api/v1/telemetry/report", json=body3, headers=_auth(device_token)
-    )
+    third = client.post("/api/v1/telemetry/report", json=body3, headers=_auth(device_token))
     assert third.status_code == 200
     assert _device_row(db)["reporting_paused"] == 1
 
@@ -106,17 +98,13 @@ def test_report_requires_token(client):
 
 
 def test_report_rejects_unknown_token(client):
-    resp = client.post(
-        "/api/v1/telemetry/report", json=_report(1), headers=_auth("no-such-token")
-    )
+    resp = client.post("/api/v1/telemetry/report", json=_report(1), headers=_auth("no-such-token"))
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "token_invalid"
 
 
 def test_report_seq_advances_and_replays_rejected(client, db, device_token):
-    first = client.post(
-        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
-    )
+    first = client.post("/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token))
     assert first.status_code == 200, first.text
     data = first.json()
     assert data["plugin_latest"]
@@ -130,22 +118,16 @@ def test_report_seq_advances_and_replays_rejected(client, db, device_token):
     assert device["last_seq"] == 1
 
     # 同 seq 重放 → 409 seq_conflict（整包拒绝，SPEC 8.1/8.5）
-    replay = client.post(
-        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
-    )
+    replay = client.post("/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token))
     assert replay.status_code == 409
     assert replay.json()["error"]["code"] == "seq_conflict"
 
     # 倒退 seq 同样拒绝
-    rollback = client.post(
-        "/api/v1/telemetry/report", json=_report(0), headers=_auth(device_token)
-    )
+    rollback = client.post("/api/v1/telemetry/report", json=_report(0), headers=_auth(device_token))
     assert rollback.status_code == 409
 
     # 递增 seq 受理
-    nxt = client.post(
-        "/api/v1/telemetry/report", json=_report(2), headers=_auth(device_token)
-    )
+    nxt = client.post("/api/v1/telemetry/report", json=_report(2), headers=_auth(device_token))
     assert nxt.status_code == 200
 
 
@@ -158,9 +140,7 @@ def test_report_agents_upsert_semantics(client, db, device_token):
         {"agent_key": "default", "name": "Default", "description": "主智能体", "status": "active"},
         {"agent_key": "helper-1"},  # name/description 缺省（宽松校验）
     ]
-    resp = client.post(
-        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
-    )
+    resp = client.post("/api/v1/telemetry/report", json=body, headers=_auth(device_token))
     assert resp.status_code == 200, resp.text
 
     rows = db.query_all(
@@ -180,17 +160,14 @@ def test_report_agents_upsert_semantics(client, db, device_token):
 
     # 重报：白名单内更新生效；description None 不清空；blocked 不被覆盖
     db.execute(
-        "UPDATE agents SET status = 'blocked' "
-        "WHERE agent_key = 'default' AND owner_user_id = ?",
+        "UPDATE agents SET status = 'blocked' WHERE agent_key = 'default' AND owner_user_id = ?",
         (owner_id,),
     )
     body2 = _report(2)
     body2["agents"] = [
         {"agent_key": "default", "name": "Default v2", "description": None, "status": "active"},
     ]
-    resp2 = client.post(
-        "/api/v1/telemetry/report", json=body2, headers=_auth(device_token)
-    )
+    resp2 = client.post("/api/v1/telemetry/report", json=body2, headers=_auth(device_token))
     assert resp2.status_code == 200
     rows2 = db.query_all(
         "SELECT * FROM agents WHERE owner_user_id = ? ORDER BY agent_key", (owner_id,)
@@ -221,9 +198,7 @@ def test_report_agents_same_key_two_employees(client, db, device_token):
 
     body1 = _report(1)
     body1["agents"] = [{"agent_key": "shared-key", "name": "A"}]
-    first = client.post(
-        "/api/v1/telemetry/report", json=body1, headers=_auth(device_token)
-    )
+    first = client.post("/api/v1/telemetry/report", json=body1, headers=_auth(device_token))
     assert first.status_code == 200
 
     body2 = {
@@ -232,9 +207,7 @@ def test_report_agents_same_key_two_employees(client, db, device_token):
         "agents": [{"agent_key": "shared-key", "name": "B"}],
         "usage": [],
     }
-    second = client.post(
-        "/api/v1/telemetry/report", json=body2, headers=_auth(token2)
-    )
+    second = client.post("/api/v1/telemetry/report", json=body2, headers=_auth(token2))
     assert second.status_code == 200
 
     rows = db.query_all(
@@ -250,9 +223,7 @@ def test_report_revoked_token_rejected(client, db, device_token):
         "UPDATE devices SET status = 'revoked' WHERE token_hash IS NOT NULL AND user_id = ("
         "SELECT id FROM users WHERE employee_no = 'T001')"
     )
-    resp = client.post(
-        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
-    )
+    resp = client.post("/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token))
     # 吊销链路（3.7/8.5）：401 + token_revoked → 插件红灯停报
     assert resp.status_code == 401
     assert resp.json()["error"]["code"] == "token_revoked"
@@ -269,9 +240,7 @@ def test_report_lenient_payload_validation(client, device_token):
             "model": "qwen-max",
         }
     ]
-    resp = client.post(
-        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
-    )
+    resp = client.post("/api/v1/telemetry/report", json=body, headers=_auth(device_token))
     assert resp.status_code == 200, resp.text
 
 
@@ -279,9 +248,7 @@ def test_report_invalid_body_returns_validation_error(client, device_token):
     # 结构性错误走 422 validation_error（8.5 统一格式由 app 异常处理器保证）
     bad = _report(6)
     bad["agents"] = [{"name": "missing-agent-key"}]
-    resp = client.post(
-        "/api/v1/telemetry/report", json=bad, headers=_auth(device_token)
-    )
+    resp = client.post("/api/v1/telemetry/report", json=bad, headers=_auth(device_token))
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "validation_error"
 
@@ -312,9 +279,7 @@ def test_report_usage_upsert_semantics(client, db, device_token):
             "prompt_tokens": 7,
         },
     ]
-    resp = client.post(
-        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
-    )
+    resp = client.post("/api/v1/telemetry/report", json=body, headers=_auth(device_token))
     assert resp.status_code == 200, resp.text
 
     agent_db_id = db.query_one(
@@ -352,9 +317,7 @@ def test_report_usage_upsert_semantics(client, db, device_token):
             "call_count": 3,
         },
     ]
-    resp2 = client.post(
-        "/api/v1/telemetry/report", json=body2, headers=_auth(device_token)
-    )
+    resp2 = client.post("/api/v1/telemetry/report", json=body2, headers=_auth(device_token))
     assert resp2.status_code == 200
     rows2 = db.query_all(
         "SELECT * FROM usage_daily WHERE user_id = ? ORDER BY agent_id", (owner_id,)
@@ -386,9 +349,7 @@ def test_report_usage_owner_scoped_resolution(client, db, device_token):
 
     body = _report(1)
     body["agents"] = [{"agent_key": "default", "name": "Default"}]
-    client.post(
-        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
-    )
+    client.post("/api/v1/telemetry/report", json=body, headers=_auth(device_token))
 
     body2 = {
         "device": {},
@@ -405,16 +366,12 @@ def test_report_usage_owner_scoped_resolution(client, db, device_token):
         ],
     }
     second = client.post(
-        "/api/v1/telemetry/report", json=body2, headers=_auth(
-            resp.json()["device_token"]
-        )
+        "/api/v1/telemetry/report", json=body2, headers=_auth(resp.json()["device_token"])
     )
     assert second.status_code == 200, second.text
 
     t002_id = db.query_one("SELECT id FROM users WHERE employee_no = 'T002'")["id"]
-    row = db.query_one(
-        "SELECT agent_id FROM usage_daily WHERE user_id = ?", (t002_id,)
-    )
+    row = db.query_one("SELECT agent_id FROM usage_daily WHERE user_id = ?", (t002_id,))
     assert row["agent_id"] == 0  # 未归属哨兵：T001 的 default 不被 T002 解析
 
 
@@ -433,8 +390,7 @@ def test_usage_report_view_prefers_gateway(db):
     db.execute(_insert, ("deepseek", "deepseek-v4", 7, "client"))
 
     rows = db.query_all(
-        "SELECT provider_id, source, prompt_tokens FROM usage_report"
-        " ORDER BY provider_id"
+        "SELECT provider_id, source, prompt_tokens FROM usage_report ORDER BY provider_id"
     )
     assert [(r["provider_id"], r["source"], r["prompt_tokens"]) for r in rows] == [
         ("dashscope", "gateway", 300),  # gateway 优先，同维度 client 行排除

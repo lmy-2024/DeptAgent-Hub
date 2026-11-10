@@ -58,6 +58,4 @@ def bind(body: BindRequest, request: Request, db: DbDep) -> BindResponse:
             client_version=body.device_info.client_version,
         ),
     )
-    return BindResponse(
-        device_token=result.device_token, server_config=result.server_config
-    )
+    return BindResponse(device_token=result.device_token, server_config=result.server_config)

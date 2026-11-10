@@ -124,9 +124,7 @@ def report(
     )
 
 
-def _store_heartbeat(
-    conn: sqlite3.Connection, device: sqlite3.Row, payload: DevicePayload
-) -> None:
+def _store_heartbeat(conn: sqlite3.Connection, device: sqlite3.Row, payload: DevicePayload) -> None:
     """心跳入库（T1.5：7.1 devices 白名单 8 字段中的 7 列 + last_heartbeat）。
 
     宽松校验语义（8.1）：None 字段不覆盖已有值（COALESCE）——旧版插件
@@ -204,9 +202,7 @@ def _store_agents(
         )
 
 
-def _store_usage(
-    conn: sqlite3.Connection, device: sqlite3.Row, usage: list[UsagePayload]
-) -> None:
+def _store_usage(conn: sqlite3.Connection, device: sqlite3.Row, usage: list[UsagePayload]) -> None:
     """用量入库（T1.7：8.1 归属解析 + 7.1 UPSERT 白名单 + team 快照）。
 
     - 归属（8.1）：payload.agent_key 按上报员工本人在 agents 台账中
@@ -222,9 +218,7 @@ def _store_usage(
     user_id = device["user_id"]
     if user_id is None:
         return  # 绑定流程保证设备归属员工；防御分支（无归属不落用量）
-    team_row = conn.execute(
-        "SELECT team FROM users WHERE id = ?", (user_id,)
-    ).fetchone()
+    team_row = conn.execute("SELECT team FROM users WHERE id = ?", (user_id,)).fetchone()
     team_snapshot = team_row["team"] if team_row is not None else None
     key_to_id = {
         row["agent_key"]: row["id"]

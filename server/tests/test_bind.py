@@ -39,7 +39,10 @@ def test_bind_creates_user_and_device_with_token_hash(client, db, invite):
     user = db.query_one("SELECT * FROM users WHERE employee_no = 'E001'")
     assert user is not None
     assert (user["name"], user["role"], user["team"], user["status"]) == (
-        "员工甲", "member", "财务科", "active",
+        "员工甲",
+        "member",
+        "财务科",
+        "active",
     )
     device = db.query_one("SELECT * FROM devices WHERE user_id = ?", (user["id"],))
     assert device is not None
@@ -53,7 +56,9 @@ def test_bind_creates_user_and_device_with_token_hash(client, db, invite):
 
     # 响应携带服务器参数（D2 拍板频率下发）
     assert data["server_config"]["report_intervals_sec"] == {
-        "usage": 300, "agents": 900, "heartbeat": 300,
+        "usage": 300,
+        "agents": 900,
+        "heartbeat": 300,
     }
 
 
@@ -113,15 +118,13 @@ def test_same_employee_binds_second_device(client, db, invite):
         "INSERT INTO invitations (code, team, role, expires_at) VALUES (?, ?, ?, ?)",
         ("INV-SECOND", "财务科", "member", "2099-01-01T00:00:00+00:00"),
     )
-    t2 = client.post(
-        "/api/v1/bind", json=_bind_body("INV-SECOND", employee_no="E001")
-    ).json()["device_token"]
+    t2 = client.post("/api/v1/bind", json=_bind_body("INV-SECOND", employee_no="E001")).json()[
+        "device_token"
+    ]
     # 两台设备、两个独立令牌、同一 user_id（可单独吊销，SPEC 5.2）
     assert t1 != t2
     user = db.query_one("SELECT * FROM users WHERE employee_no = 'E001'")
-    devices = db.query_all(
-        "SELECT * FROM devices WHERE user_id = ? ORDER BY id", (user["id"],)
-    )
+    devices = db.query_all("SELECT * FROM devices WHERE user_id = ? ORDER BY id", (user["id"],))
     assert len(devices) == 2
     assert {d["token_hash"] for d in devices} == {token_sha256(t1), token_sha256(t2)}
 
@@ -130,7 +133,11 @@ def test_disabled_employee_cannot_bind(client, db, super_token, invite):
     from tests.conftest import _create_account  # noqa: PLC0415 - 测试内复用造号工具
 
     account = _create_account(
-        client, super_token, employee_no="E100", name="停用者", role="member",
+        client,
+        super_token,
+        employee_no="E100",
+        name="停用者",
+        role="member",
         password="member-pass-123456",
     )
     client.post(

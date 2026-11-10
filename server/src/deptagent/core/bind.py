@@ -80,17 +80,13 @@ def _unusable_password_hash() -> str:
 
 def bind_device(db: Database, body: BindInput) -> BindResult:
     """校验邀请码并完成绑定（一次性、一人多机、明文令牌仅返回一次）。"""
-    invite = db.query_one(
-        "SELECT * FROM invitations WHERE code = ?", (body.invite_code,)
-    )
+    invite = db.query_one("SELECT * FROM invitations WHERE code = ?", (body.invite_code,))
     if invite is None or invite["used_by"] is not None:
         raise ApiError(400, "invite_invalid", "邀请码无效或已被使用")
     if invite["expires_at"] is not None and invite["expires_at"] <= utc_now_iso():
         raise ApiError(400, "invite_expired", "邀请码已过期")
 
-    user = db.query_one(
-        "SELECT * FROM users WHERE employee_no = ?", (body.employee_no,)
-    )
+    user = db.query_one("SELECT * FROM users WHERE employee_no = ?", (body.employee_no,))
     if user is not None and user["status"] != "active":
         # 停用账号不可再绑新设备（5.2 离职停用语义）
         raise ApiError(400, "invite_invalid", "账号已停用，无法绑定")
@@ -101,9 +97,7 @@ def bind_device(db: Database, body: BindInput) -> BindResult:
         if user is None:
             # closed 模式（D7）自动激活；role/team 来自邀请码（5.2：admin+ 不经邀请码产生）
             password_hash = (
-                hash_password(body.password)
-                if body.password
-                else _unusable_password_hash()
+                hash_password(body.password) if body.password else _unusable_password_hash()
             )
             cursor = conn.execute(
                 """
@@ -161,9 +155,7 @@ def verify_device_token(db: Database, token: str) -> sqlite3.Row:
     令牌不存在 → 401 token_invalid；已吊销 → 401 token_revoked
     （吊销交互链路：插件收到即红灯停报，3.7/8.5）。
     """
-    row = db.query_one(
-        "SELECT * FROM devices WHERE token_hash = ?", (token_sha256(token),)
-    )
+    row = db.query_one("SELECT * FROM devices WHERE token_hash = ?", (token_sha256(token),))
     if row is None:
         raise ApiError(401, "token_invalid", "设备令牌无效")
     if row["status"] != "active":

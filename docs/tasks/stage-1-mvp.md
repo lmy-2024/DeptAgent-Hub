@@ -36,9 +36,10 @@
 ## 三通道（每条 = 插件 collector + 服务端 UPSERT）
 
 ## T1.5 心跳通道
-- [ ] collectors/heartbeat.py：SPEC 3.4 ①全字段（含 reporting_paused）
-- [ ] 服务端 device UPSERT（7.1 白名单：客户端只更新 8 个字段）
-- [ ] 吊销链路实测：吊销 → 401 token_revoked → 插件红灯停报（SPEC 3.7、8.5、3.11 第 5 条）
+- [x] collectors/heartbeat.py：SPEC 3.4 ①全字段（含 reporting_paused）
+- [x] 服务端 device UPSERT（7.1 白名单：客户端只更新 8 个字段）——COALESCE 宽松语义（None 不覆盖），单测 2 个入库断言
+- [x] 吊销链路实测：吊销 → 401 token_revoked → 插件红灯停报（SPEC 3.7、8.5、3.11 第 5 条）——端到端冒烟（真 server uvicorn + 插件 uploader 真代码 + FakeContext）：UploadStopped + telemetry_status 写 revoked + reporting_stopped()=True
+- [x] 配套：uploader.py（seq async.Lock + 409 重置）、config.py（STORAGE_FILES 集中声明解导入环）、scheduler 三通道接真实采集器
 - commit: ______
 
 ## T1.6 台账通道

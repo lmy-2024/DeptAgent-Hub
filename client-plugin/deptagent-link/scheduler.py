@@ -7,8 +7,10 @@
 - StaleContextError = 插件已被禁用/升级/替换（3.12 第 8 条）→ 视为正常
   停机信号，安静退出，不打错误日志；
 - 持久化只走 context.storage（原子写、路径锁定插件数据目录，3.12 第 5 条）：
-  离线队列 / 增量水位 / 绑定状态的存储键在 STORAGE_FILES 中集中声明，
-  由 binding.py（T1.3）、uploader.py（T1.4）、collectors/usage.py（T1.7）使用。
+  存储键在 config.STORAGE_FILES 集中声明（binding / uploader / collectors
+  共用，独立模块避免相互导入成环）；
+- 红灯停报（3.7）：令牌吊销后各通道本轮直接跳过（循环存活，等重新
+  绑定后自动恢复，采集器/uploader 每轮重新读 binding）。
 """
 
 from __future__ import annotations
@@ -19,17 +21,17 @@ from typing import Awaitable, Callable
 
 from qwenpaw.plugins import PluginContext, StaleContextError
 
+import config
+from collectors.agents import collect_agents
+from collectors.heartbeat import collect_heartbeat
+from collectors.usage import collect_usage
+from config import STORAGE_FILES
+from uploader import UploadStopped, reporting_stopped, send_report
+
 # 拍板 D2（2026-11-10）：用量 / 台账 / 心跳 = 5 / 15 / 5 min
 USAGE_INTERVAL_SECONDS = 5 * 60
 AGENTS_INTERVAL_SECONDS = 15 * 60
 HEARTBEAT_INTERVAL_SECONDS = 5 * 60
-
-# 持久化键（context.storage 相对路径；SPEC 3.12 第 5 条：只写插件数据目录）
-STORAGE_FILES = {
-    "offline_queue": "offline_queue.json",  # 离线上报队列（T1.4 uploader）
-    "watermark": "watermark.json",  # 各通道增量水位（T1.7 usage）
-    "binding": "binding.json",  # 绑定状态（T1.3 binding）
-}
 
 
 async def start_scheduler(context: PluginContext, *, run_immediately: bool = False) -> None:
@@ -46,6 +48,7 @@ async def start_scheduler(context: PluginContext, *, run_immediately: bool = Fal
     --runtime 会报 unhosted_task 残留，见 QwenPaw 源码
     plugins/resources.py ResourceScope.task）。
     """
+    config.ACTIVATED_AT = datetime.now(UTC)
     watermark = await context.storage.aread_json(STORAGE_FILES["watermark"], {})
     context.logger.info(
         "deptagent-link scheduler started",
@@ -53,9 +56,9 @@ async def start_scheduler(context: PluginContext, *, run_immediately: bool = Fal
     )
 
     channels: tuple[tuple[str, float, Callable[[PluginContext], Awaitable[None]]], ...] = (
-        ("heartbeat", HEARTBEAT_INTERVAL_SECONDS, _collect_heartbeat),
-        ("agents", AGENTS_INTERVAL_SECONDS, _collect_agents),
-        ("usage", USAGE_INTERVAL_SECONDS, _collect_usage),
+        ("heartbeat", HEARTBEAT_INTERVAL_SECONDS, _run_heartbeat),
+        ("agents", AGENTS_INTERVAL_SECONDS, _run_agents),
+        ("usage", USAGE_INTERVAL_SECONDS, _run_usage),
     )
     for name, interval, action in channels:
         context.resources.task(
@@ -107,16 +110,42 @@ async def _touch_watermark(context: PluginContext, channel: str) -> None:
     await context.storage.awrite_json(STORAGE_FILES["watermark"], watermark)
 
 
-async def _collect_heartbeat(context: PluginContext) -> None:
-    """心跳采集器（T1.5 替换实现：SPEC 3.4 ①全字段）。"""
-    _ = context
+async def _run_heartbeat(context: PluginContext) -> None:
+    """心跳通道（T1.5）：采集设备快照 → 上报（agents/usage 段为空）。"""
+    device = await collect_heartbeat(context)
+    await _send(context, device=device, agents=[], usage=[])
 
 
-async def _collect_agents(context: PluginContext) -> None:
-    """智能体台账采集器（T1.6 替换实现：SPEC 3.4 ②字段）。"""
-    _ = context
+async def _run_agents(context: PluginContext) -> None:
+    """台账通道（T1.6）：采集智能体快照 → 上报（采集器当前占位返空）。"""
+    agents = await collect_agents(context)
+    await _send(context, device={}, agents=agents, usage=[])
 
 
-async def _collect_usage(context: PluginContext) -> None:
-    """Token 用量采集器（T1.7 替换实现：SPEC 3.4 ③六项计数）。"""
-    _ = context
+async def _run_usage(context: PluginContext) -> None:
+    """用量通道（T1.7）：采集增量用量 → 上报（采集器当前占位返空）。"""
+    usage = await collect_usage(context)
+    await _send(context, device={}, agents=[], usage=usage)
+
+
+async def _send(
+    context: PluginContext, *, device: dict, agents: list, usage: list
+) -> None:
+    """通道公共尾部：红灯检查 → 上报 → 异常分类。
+
+    - 红灯（3.7 吊销/失效）：本轮直接跳过，循环存活等重新绑定；
+    - UploadStopped：吊销确认（红灯已由 uploader 写入），记 info 不抛错；
+    - UploadRetryable / 其他异常：继续上抛 → _channel_loop 记 warning
+      后下个周期重试（3.7 容错与降级链）。
+    """
+    if await reporting_stopped(context):
+        return
+    try:
+        await send_report(context, device=device, agents=agents, usage=usage)
+    except UploadStopped as exc:
+        try:
+            context.logger.info(
+                "deptagent-link reporting stopped", fields={"reason": str(exc)}
+            )
+        except StaleContextError:
+            return

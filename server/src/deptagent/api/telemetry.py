@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from ..core.bind import SERVER_REPORT_INTERVALS_SEC, verify_device_token
 from ..core.errors import ApiError
+from ..core.utc import utc_now_iso
 from .deps import DbDep
 
 router = APIRouter(prefix="/api/v1/telemetry", tags=["telemetry"])
@@ -126,8 +127,36 @@ def report(
 def _store_heartbeat(
     conn: sqlite3.Connection, device: sqlite3.Row, payload: DevicePayload
 ) -> None:
-    """心跳入库（T1.5 交付：7.1 devices 白名单 8 字段）。"""
-    _ = conn, device, payload
+    """心跳入库（T1.5：7.1 devices 白名单 8 字段中的 7 列 + last_heartbeat）。
+
+    宽松校验语义（8.1）：None 字段不覆盖已有值（COALESCE）——旧版插件
+    缺字段时服务端数据不回退；last_seq 由端点主流程的 CAS 推进负责。
+    uptime_hours / binding_status 为端点侧展示字段，7 章 devices 无对应列
+    不落库（4.3 台账在线状态由 last_heartbeat 推导）。
+    """
+    conn.execute(
+        """
+        UPDATE devices SET
+            device_name = COALESCE(?, device_name),
+            os = COALESCE(?, os),
+            client_version = COALESCE(?, client_version),
+            plugin_version = COALESCE(?, plugin_version),
+            last_format_probe = COALESCE(?, last_format_probe),
+            reporting_paused = COALESCE(?, reporting_paused),
+            last_heartbeat = ?
+        WHERE id = ?
+        """,
+        (
+            payload.name,
+            payload.os,
+            payload.client_version,
+            payload.plugin_version,
+            payload.format_probe,
+            payload.reporting_paused,  # bool → SQLite INTEGER；None 保持原值
+            utc_now_iso(),
+            device["id"],
+        ),
+    )
 
 
 def _store_agents(

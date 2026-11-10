@@ -48,6 +48,57 @@ def _auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _device_row(db, employee_no: str = "T001"):
+    return db.query_one(
+        "SELECT * FROM devices WHERE token_hash IS NOT NULL AND user_id = ("
+        f"SELECT id FROM users WHERE employee_no = '{employee_no}')"
+    )
+
+
+def test_report_heartbeat_stored(client, db, device_token):
+    """T1.5：心跳 8 字段落 7.1 白名单列（last_seq 由 CAS 负责）。"""
+    resp = client.post(
+        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
+    )
+    assert resp.status_code == 200, resp.text
+    row = _device_row(db)
+    assert row["device_name"] == "PC-T001"
+    assert row["os"] == "Windows 11"
+    assert row["client_version"] == "2.3.0b3"
+    assert row["plugin_version"] == "0.1.0"
+    assert row["last_format_probe"] == "qwenpaw-2.3"
+    assert row["reporting_paused"] == 0
+    assert row["last_heartbeat"]  # 服务器时刻（10.1 UTC ISO，不由客户端自报）
+
+
+def test_report_heartbeat_none_keeps_previous(client, db, device_token):
+    """T1.5：宽松校验语义——device 段缺省时 None 字段不覆盖已有值。"""
+    first = client.post(
+        "/api/v1/telemetry/report", json=_report(1), headers=_auth(device_token)
+    )
+    assert first.status_code == 200
+
+    body = _report(2)
+    body["device"] = {}  # 全字段 None
+    second = client.post(
+        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
+    )
+    assert second.status_code == 200
+    row = _device_row(db)
+    assert row["device_name"] == "PC-T001"  # 未被 None 覆盖
+    assert row["os"] == "Windows 11"
+    assert row["last_heartbeat"]  # 每次心跳都刷新
+
+    # reporting_paused 布尔整型化：True → 1
+    body3 = _report(3)
+    body3["device"]["reporting_paused"] = True
+    third = client.post(
+        "/api/v1/telemetry/report", json=body3, headers=_auth(device_token)
+    )
+    assert third.status_code == 200
+    assert _device_row(db)["reporting_paused"] == 1
+
+
 def test_report_requires_token(client):
     resp = client.post("/api/v1/telemetry/report", json=_report(1))
     assert resp.status_code == 401

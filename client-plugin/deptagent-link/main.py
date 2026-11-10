@@ -9,9 +9,8 @@ register 仅做声明式注册；调度器等后台任务在 context.on_activate
 from qwenpaw.plugins import PluginContext
 
 from binding import get_binding
+from config import PLUGIN_VERSION
 from scheduler import start_scheduler
-
-PLUGIN_VERSION = "0.1.0"
 
 
 class Plugin:

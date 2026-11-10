@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 import httpx
 from qwenpaw.plugins import PluginContext
 
-from scheduler import STORAGE_FILES
+from config import STORAGE_FILES
 
 BIND_TIMEOUT_SECONDS = 10
 

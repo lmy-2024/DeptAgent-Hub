@@ -149,6 +149,102 @@ def test_report_seq_advances_and_replays_rejected(client, db, device_token):
     assert nxt.status_code == 200
 
 
+def test_report_agents_upsert_semantics(client, db, device_token):
+    """T1.6：台账 UPSERT 归属语义 + 7.1 白名单。"""
+    owner_id = db.query_one("SELECT id FROM users WHERE employee_no = 'T001'")["id"]
+
+    body = _report(1)
+    body["agents"] = [
+        {"agent_key": "default", "name": "Default", "description": "主智能体", "status": "active"},
+        {"agent_key": "helper-1"},  # name/description 缺省（宽松校验）
+    ]
+    resp = client.post(
+        "/api/v1/telemetry/report", json=body, headers=_auth(device_token)
+    )
+    assert resp.status_code == 200, resp.text
+
+    rows = db.query_all(
+        "SELECT * FROM agents WHERE owner_user_id = ? ORDER BY agent_key", (owner_id,)
+    )
+    assert len(rows) == 2
+    r0, r1 = rows
+    # 归属：owner=令牌对应员工；维护人默认同创建人（8.1/5.3）
+    assert r0["agent_key"] == "default"
+    assert r0["owner_user_id"] == owner_id
+    assert r0["maintainer_user_id"] == owner_id
+    assert r0["name"] == "Default"
+    assert r0["description"] == "主智能体"
+    assert r0["status"] == "new"  # INSERT 首写 new；客户端 status 不落库
+    assert r0["first_seen_at"] and r0["last_seen_at"]
+    assert r1["name"] == "helper-1"  # name None 时 agent_key 兜底（NOT NULL）
+
+    # 重报：白名单内更新生效；description None 不清空；blocked 不被覆盖
+    db.execute(
+        "UPDATE agents SET status = 'blocked' "
+        "WHERE agent_key = 'default' AND owner_user_id = ?",
+        (owner_id,),
+    )
+    body2 = _report(2)
+    body2["agents"] = [
+        {"agent_key": "default", "name": "Default v2", "description": None, "status": "active"},
+    ]
+    resp2 = client.post(
+        "/api/v1/telemetry/report", json=body2, headers=_auth(device_token)
+    )
+    assert resp2.status_code == 200
+    rows2 = db.query_all(
+        "SELECT * FROM agents WHERE owner_user_id = ? ORDER BY agent_key", (owner_id,)
+    )
+    assert len(rows2) == 2  # 幂等不新增
+    d = rows2[0]
+    assert d["name"] == "Default v2"  # 白名单内字段更新
+    assert d["description"] == "主智能体"  # None 不覆盖旧值
+    assert d["status"] == "blocked"  # 服务端治理状态不被客户端覆盖（7.1）
+
+
+def test_report_agents_same_key_two_employees(client, db, device_token):
+    """T1.6：同名 agent_key 不同员工 → 两行（UNIQUE(owner, agent_key)）。"""
+    db.execute(
+        "INSERT INTO invitations (code, team, role, expires_at) VALUES (?, ?, ?, ?)",
+        ("INV-T2", "财务科", "member", "2099-01-01T00:00:00+00:00"),
+    )
+    resp = client.post(
+        "/api/v1/bind",
+        json={
+            "invite_code": "INV-T2",
+            "employee_no": "T002",
+            "device_info": {"name": "PC-T002"},
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    token2 = resp.json()["device_token"]
+
+    body1 = _report(1)
+    body1["agents"] = [{"agent_key": "shared-key", "name": "A"}]
+    first = client.post(
+        "/api/v1/telemetry/report", json=body1, headers=_auth(device_token)
+    )
+    assert first.status_code == 200
+
+    body2 = {
+        "device": {},
+        "seq": 1,
+        "agents": [{"agent_key": "shared-key", "name": "B"}],
+        "usage": [],
+    }
+    second = client.post(
+        "/api/v1/telemetry/report", json=body2, headers=_auth(token2)
+    )
+    assert second.status_code == 200
+
+    rows = db.query_all(
+        "SELECT owner_user_id, name FROM agents "
+        "WHERE agent_key = 'shared-key' ORDER BY owner_user_id"
+    )
+    assert len(rows) == 2  # 同名 key 在不同员工机器上各自成行
+    assert {r["name"] for r in rows} == {"A", "B"}
+
+
 def test_report_revoked_token_rejected(client, db, device_token):
     db.execute(
         "UPDATE devices SET status = 'revoked' WHERE token_hash IS NOT NULL AND user_id = ("

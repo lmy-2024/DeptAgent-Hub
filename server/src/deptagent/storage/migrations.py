@@ -4,7 +4,8 @@
 - 幂等：重复调用按 schema_version 跳过已应用版本（T0.3 单测验证）；
 - DDL 严格照抄 SPEC 第 7 章：阶段 0 仅建 users / devices / audit_log 首批三表
   （含索引）；002 = invitations（绑定链路 T1.3 提前建表，审批流/批量开码
-  留阶段 2）；agents / usage_daily 等随阶段 1 遥测竖切以 003+ 增量加入。
+  留阶段 2）；003 = agents（台账通道 T1.6）；usage_daily 等随阶段 1
+  遥测竖切以 004+ 增量加入。
 """
 
 from __future__ import annotations
@@ -65,6 +66,29 @@ MIGRATIONS: list[tuple[int, str, list[str]]] = [
                 expires_at TEXT, used_by INTEGER, used_at TEXT
             )
             """,
+        ],
+    ),
+    (
+        3,
+        "阶段1台账通道：agents（SPEC 7 章）",
+        [
+            """
+            CREATE TABLE agents (
+                id INTEGER PRIMARY KEY,
+                agent_key TEXT NOT NULL,              -- 客户端本地标识, 仅在单一员工内唯一
+                owner_user_id INTEGER REFERENCES users(id),  -- 服务端按上报设备归属登记
+                maintainer_user_id INTEGER,           -- 默认=创建人, 管理员可改派
+                definition_key TEXT,                  -- 同模板/同源聚合键(可空): 全部门聚合统计用
+                name TEXT NOT NULL, description TEXT,
+                category TEXT, tags TEXT,
+                status TEXT DEFAULT 'new',             -- new / active / archived / blocked
+                shared INTEGER DEFAULT 0,
+                first_seen_at TEXT, last_seen_at TEXT,
+                UNIQUE(owner_user_id, agent_key)      -- 同名 agent_key 可在不同员工机器上出现
+            )
+            """,
+            "CREATE INDEX idx_agents_owner ON agents(owner_user_id, status)",
+            "CREATE INDEX idx_agents_def ON agents(definition_key)",
         ],
     ),
 ]

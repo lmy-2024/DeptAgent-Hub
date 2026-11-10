@@ -162,8 +162,46 @@ def _store_heartbeat(
 def _store_agents(
     conn: sqlite3.Connection, device: sqlite3.Row, agents: list[AgentPayload]
 ) -> None:
-    """台账入库（T1.6 交付：归属语义 + UPSERT 白名单）。"""
-    _ = conn, device, agents
+    """台账入库（T1.6：8.1 归属语义 + 7.1 UPSERT 白名单）。
+
+    - 归属：客户端不自报 owner/maintainer——owner_user_id 按上报设备令牌
+      对应员工登记（首次上报该 agent_key 的用户，UNIQUE(owner, key)
+      保证后续同设备/同人重报不迁移归属）；维护人默认同创建人（5.3）；
+    - 白名单：客户端只可更新 name / description / last_seen_at；
+      status 仅 INSERT 首写 'new'（确认/归档/封停全在管理端，blocked
+      不被任何客户端上报覆盖）；definition_key / category / tags /
+      shared / maintainer 不受客户端影响；payload.status 为客户端本地
+      启停参考信息，不落库；
+    - 宽松语义：name/description 为 None 时不覆盖旧值（name NOT NULL
+      由 agent_key 兜底）；last_seen_at 取服务器时刻（10.1）。
+    """
+    owner_id = device["user_id"]
+    if owner_id is None:
+        return  # 绑定流程保证设备归属员工；防御分支（无归属不落台账）
+    now = utc_now_iso()
+    for agent in agents:
+        conn.execute(
+            """
+            INSERT INTO agents (
+                agent_key, owner_user_id, maintainer_user_id,
+                name, description, status, first_seen_at, last_seen_at
+            ) VALUES (?, ?, ?, COALESCE(?, ?), ?, 'new', ?, ?)
+            ON CONFLICT(owner_user_id, agent_key) DO UPDATE SET
+                name = COALESCE(excluded.name, agents.name),
+                description = COALESCE(excluded.description, agents.description),
+                last_seen_at = excluded.last_seen_at
+            """,
+            (
+                agent.agent_key,
+                owner_id,
+                owner_id,
+                agent.name,
+                agent.agent_key,
+                agent.description,
+                now,
+                now,
+            ),
+        )
 
 
 def _store_usage(

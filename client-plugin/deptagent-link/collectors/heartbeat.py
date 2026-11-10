@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import platform
 from datetime import UTC, datetime
 from importlib import metadata
@@ -13,6 +14,7 @@ from importlib import metadata
 from qwenpaw.plugins import PluginContext
 
 import config
+from adapters.base import detect_format
 from binding import get_binding
 
 
@@ -38,6 +40,8 @@ async def collect_heartbeat(context: PluginContext) -> dict:
         uptime_hours = round(delta.total_seconds() / 3600, 2)
 
     binding = await get_binding(context)
+    # 格式探测（adapters/base.py）：探测失败 None（服务端 COALESCE 不覆盖旧值，降级留痕）
+    fmt, _reader = await asyncio.to_thread(detect_format)
     return {
         "name": platform.node() or None,
         "os": platform.platform() or None,
@@ -45,7 +49,6 @@ async def collect_heartbeat(context: PluginContext) -> dict:
         "plugin_version": config.PLUGIN_VERSION,
         "uptime_hours": uptime_hours,
         "binding_status": "ok" if binding is not None else "unbound",
-        # 本地数据格式探测（T1.6 台账扫描本地数据时填充；None 不覆盖服务端旧值）
-        "format_probe": None,
+        "format_probe": fmt,
         "reporting_paused": await _reporting_paused(context),
     }

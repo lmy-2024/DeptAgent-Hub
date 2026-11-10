@@ -5,7 +5,8 @@
 
 ## 当前状态
 - 阶段：1（MVP 竖切）
-- 当前任务：T1.5 心跳通道完成；下一步 T1.6 台账通道（agents collector + UPSERT 归属语义）
+- 当前任务：T1.6 台账通道完成；下一步 T1.7 用量通道（usage collector + 增量算法 + usage_report VIEW）
+- 后挂事项：4ae8241（T1.5）待推送——GitHub 直连阻断需 UAC 授权 hosts 修复（弹窗三次被取消），每轮 commit 后重试 push
 - 最后更新：2026-11-10
 
 ## 已完成
@@ -20,6 +21,7 @@
 - [x] T1.3 绑定链路：服务端 core/bind.py + api/bind.py（限速/一次性/一人多机/停用拒绝）+ 迁移 002 invitations + 插件 binding.py + requirements.txt（httpx）；**SPEC v0.7 源码校准**：2.3.0b3 SDK 无插件侧 secrets 写 API（config 仅只读快照），设备令牌改存 binding.json（本机域+可吊销兑底）；8.2 协议补 name? 字段（users.name NOT NULL 原协议缺）；单测 30→40 全绿 + check --runtime 全绿
 - [x] T1.4 上报端点骨架：api/telemetry.py（Bearer 鉴权 + seq CAS 防重放 + 宽松校验 + plugin_latest 响应）；三段入库钩子就位（_store_heartbeat/agents/usage，T1.5–T1.7 逐链填充）；坑：FastAPI Annotated 依赖必须 Depends() 包装（裸函数会被当 Form 触发 python-multipart 错误）；单测 40→46 全绿
 - [x] T1.5 心跳通道：插件 collectors/heartbeat.py（3.4 ①全 8 字段含 reporting_paused 隐私开关）+ uploader.py（seq 自增 async.Lock 防三通道交错 + 401 红灯停报 + 409 seq 重置）+ config.py（STORAGE_FILES 集中声明解导入环，PLUGIN_VERSION/ACTIVATED_AT 共享）；服务端 _store_heartbeat（7.1 白名单 7 列 COALESCE 宽松语义）；吊销链路端到端实测通过（真 server + 真 uploader：吊销→401 token_revoked→UploadStopped→telemetry_status 写 revoked→红灯检查 True）；单测 46→48 全绿 + check --runtime 全绿
+- [x] T1.6 台账通道：插件 adapters/{base,qwenpaw_2_3}.py（3.12 包结构落地：working_dir 定位复刻宿主 constant.py 优先级 + AgentReader 协议 + detect_format 降级判定；2.3 格式族读真机 config.json agents.profiles + workspace agent.json 仅取 name/description/enabled）+ collectors/agents.py（asyncio.to_thread 文件 IO）；服务端迁移 003 agents 表 + _store_agents UPSERT（8.1 归属：owner=令牌对应员工、维护人默认同创建人；7.1 白名单：客户端只可更新 name/description/last_seen，status INSERT 首写 new、blocked 永不被覆盖；多员工同名 key 各自成行）；心跳 format_probe 接真实探测；端到端冒烟：真机双智能体全链路落库；单测 48→50 全绿 + check --runtime 全绿
 
 ## 卡点 / 待拍板（SPEC 15 章）
 - 已拍板（2026-11-10，用户授权按倾向值落定）：D1 插件命名 deptagent-link、D2 上报频率 5/15/5 min（用量/台账/心跳）、D3 回灌深度台账全量+用量 90 天、D5 员工仅插件面板、D7 注册模式 closed、D8 官方前端插件（PawApp 数据层）、D11 Argon2id（既成实现）；此前 D6 License=Apache-2.0

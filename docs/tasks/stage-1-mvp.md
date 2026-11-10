@@ -43,8 +43,10 @@
 - commit: ______
 
 ## T1.6 台账通道
-- [ ] collectors/agents.py：SPEC 3.4 ②字段（归属不由客户端自报）
-- [ ] agents UPSERT：owner_user_id = 首次上报用户、new 状态自动标记（SPEC 8.1 归属语义、5.3）
+- [x] collectors/agents.py：SPEC 3.4 ②字段（归属不由客户端自报）——经 adapters 层读真机数据（config.json agents.profiles + 各 workspace agent.json，仅取 id/name/description/enabled 三元组，隐私最小化）
+- [x] agents UPSERT：owner_user_id = 首次上报用户、new 状态自动标记（SPEC 8.1 归属语义、5.3）——blocked 不被客户端覆盖、name/description None 不清空、多员工同名 key 各自成行；单测 50 全绿
+- [x] 配套：adapters/base.py（working_dir 定位 + AgentReader 协议 + detect_format 降级判定）+ qwenpaw_2_3.py（2.3 格式族）+ 心跳 format_probe 接真实探测
+- [x] 端到端冒烟：真机 ~/.qwenpaw 双智能体（default/QA）经适配器→uploader→server 落库，归属/维护人/new 状态断言全过
 - commit: ______
 
 ## T1.7 用量通道

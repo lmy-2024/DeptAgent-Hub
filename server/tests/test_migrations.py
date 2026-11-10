@@ -63,13 +63,38 @@ def test_tables_match_spec(db):
         "detail",
         "at",
     }
+    # agents（T1.6 台账通道，SPEC 7 章逐列核对）
+    assert set(_table_columns(db, "agents")) == {
+        "id",
+        "agent_key",
+        "owner_user_id",
+        "maintainer_user_id",
+        "definition_key",
+        "name",
+        "description",
+        "category",
+        "tags",
+        "status",
+        "shared",
+        "first_seen_at",
+        "last_seen_at",
+    }
+    agents_sql = db.query_one(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='agents'"
+    )["sql"].upper()
+    assert "UNIQUE(OWNER_USER_ID, AGENT_KEY)" in agents_sql
 
 
 def test_indexes_exist(db):
     names = {
         row["name"] for row in db.query_all("SELECT name FROM sqlite_master WHERE type='index'")
     }
-    assert {"idx_devices_user", "idx_audit_log_actor"} <= names
+    assert {
+        "idx_devices_user",
+        "idx_audit_log_actor",
+        "idx_agents_owner",
+        "idx_agents_def",
+    } <= names
 
 
 def test_wal_mode(db):

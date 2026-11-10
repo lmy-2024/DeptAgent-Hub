@@ -28,9 +28,9 @@
 - commit: ______
 
 ## T1.4 上报端点骨架
-- [ ] POST /api/v1/telemetry/report：Bearer 设备令牌鉴权（SPEC 8.1）
-- [ ] seq 水位防重放：seq <= devices.last_seq → 409 seq_conflict 整包拒绝（SPEC 8.1、8.5）
-- [ ] 错误响应统一格式全量接入（SPEC 8.5）
+- [x] POST /api/v1/telemetry/report：Bearer 设备令牌鉴权（SPEC 8.1）——token_hash 反查设备， revoked → 401 token_revoked（与 3.7 吊销链路闭环）
+- [x] seq 水位防重放：seq <= devices.last_seq → 409 seq_conflict 整包拒绝（SPEC 8.1、8.5）——CAS 推进（WHERE last_seq < ?）防并发重复受理
+- [x] 错误响应统一格式全量接入（SPEC 8.5）——鉴权/防重放/宽松校验（422）/响应结构（plugin_latest + server_config）六测试全绿
 - commit: ______
 
 ## 三通道（每条 = 插件 collector + 服务端 UPSERT）

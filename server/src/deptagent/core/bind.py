@@ -156,13 +156,16 @@ def bind_device(db: Database, body: BindInput) -> BindResult:
 
 
 def verify_device_token(db: Database, token: str) -> sqlite3.Row:
-    """设备令牌 → devices 行（T1.4 上报鉴权复用）；吊销/无效统一 401 token_invalid。
+    """设备令牌 → devices 行（上报鉴权复用，SPEC 8.1/8.5）。
 
-    已吊销令牌的语义细分（token_revoked）由调用方按 devices.status 判定。
+    令牌不存在 → 401 token_invalid；已吊销 → 401 token_revoked
+    （吊销交互链路：插件收到即红灯停报，3.7/8.5）。
     """
     row = db.query_one(
         "SELECT * FROM devices WHERE token_hash = ?", (token_sha256(token),)
     )
-    if row is None or row["status"] != "active":
-        raise ApiError(401, "token_invalid", "设备令牌无效或已吊销")
+    if row is None:
+        raise ApiError(401, "token_invalid", "设备令牌无效")
+    if row["status"] != "active":
+        raise ApiError(401, "token_revoked", "设备令牌已被吊销，请联系管理员")
     return row

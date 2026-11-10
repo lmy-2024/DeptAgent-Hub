@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
-from .api import accounts, auth, bind
+from .api import accounts, auth, bind, telemetry
 from .config import Settings, load_settings
 from .core.auth import LoginRateLimiter
 from .core.bind import BindRateLimiter
@@ -80,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
     app.include_router(accounts.router)
     app.include_router(bind.router)
+    app.include_router(telemetry.router)
 
     # ---- 管理控制台静态站点（T0.8：构建产物存在才挂载）----
 

@@ -5,7 +5,7 @@
 
 ## 当前状态
 - 阶段：0（工程基座）
-- 当前任务：T1.3 绑定链路完成；下一步 T1.4 上报端点骨架（Bearer 鉴权 + seq 防重放 + 统一错误格式）
+- 当前任务：T1.4 上报端点骨架完成；下一步 T1.5 心跳通道（collector + device UPSERT 白名单 + 吊销链路）
 - 最后更新：2026-11-10
 
 ## 已完成
@@ -18,6 +18,7 @@
 - [x] T1.1 插件包骨架：client-plugin/deptagent-link/{plugin.json,main.py}；check --runtime 全绿（ok/compatible/load+activation+cleanup 全 passed，宿主日志确认 registered）；决策点 D1/D2/D3/D5/D7/D8/D11 按倾向值拍板落定
 - [x] T1.2 调度器与生命周期：scheduler.py（D2 拍板频率 5/15/5 min 三通道 + Stale 安静停机 + storage 三键集中声明）+ main.py 接入 on_activate；关键发现：插件后台任务必须走 context.resources.task() 托管（裸 create_task → check 报 unhosted_task/cleanup failed）；resources 还提供 connection/thread/process 托管（T1.4 HTTP 客户端可用）
 - [x] T1.3 绑定链路：服务端 core/bind.py + api/bind.py（限速/一次性/一人多机/停用拒绝）+ 迁移 002 invitations + 插件 binding.py + requirements.txt（httpx）；**SPEC v0.7 源码校准**：2.3.0b3 SDK 无插件侧 secrets 写 API（config 仅只读快照），设备令牌改存 binding.json（本机域+可吊销兑底）；8.2 协议补 name? 字段（users.name NOT NULL 原协议缺）；单测 30→40 全绿 + check --runtime 全绿
+- [x] T1.4 上报端点骨架：api/telemetry.py（Bearer 鉴权 + seq CAS 防重放 + 宽松校验 + plugin_latest 响应）；三段入库钩子就位（_store_heartbeat/agents/usage，T1.5–T1.7 逐链填充）；坑：FastAPI Annotated 依赖必须 Depends() 包装（裸函数会被当 Form 触发 python-multipart 错误）；单测 40→46 全绿
 
 ## 卡点 / 待拍板（SPEC 15 章）
 - 已拍板（2026-11-10，用户授权按倾向值落定）：D1 插件命名 deptagent-link、D2 上报频率 5/15/5 min（用量/台账/心跳）、D3 回灌深度台账全量+用量 90 天、D5 员工仅插件面板、D7 注册模式 closed、D8 官方前端插件（PawApp 数据层）、D11 Argon2id（既成实现）；此前 D6 License=Apache-2.0

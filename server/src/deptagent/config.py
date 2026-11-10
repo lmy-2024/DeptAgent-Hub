@@ -14,6 +14,7 @@ class Settings:
     jwt_ttl_hours: int = 12  # SPEC 10.1：JWT HS256、12h 有效期、无 refresh
     login_max_failures: int = 5  # SPEC 12 章"管理账号共享"对策：密码策略 + 失败锁定
     login_lock_minutes: int = 15
+    bind_rate_limit_per_minute: int = 10  # SPEC 8.2/10.1：/api/v1/bind IP 限速（防邀请码枚举）
     console_dist: str | None = None  # 管理控制台构建产物目录（T0.8，缺省自动探测）
 
 

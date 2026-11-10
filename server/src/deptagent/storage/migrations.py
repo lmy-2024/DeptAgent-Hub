@@ -3,7 +3,8 @@
 - 迁移 = (版本号, 描述, SQL 语句列表)，按版本号升序应用，原子事务；
 - 幂等：重复调用按 schema_version 跳过已应用版本（T0.3 单测验证）；
 - DDL 严格照抄 SPEC 第 7 章：阶段 0 仅建 users / devices / audit_log 首批三表
-  （含索引）；agents / usage_daily 等随阶段 1 遥测竖切以迁移 002+ 增量加入。
+  （含索引）；002 = invitations（绑定链路 T1.3 提前建表，审批流/批量开码
+  留阶段 2）；agents / usage_daily 等随阶段 1 遥测竖切以 003+ 增量加入。
 """
 
 from __future__ import annotations
@@ -52,6 +53,18 @@ MIGRATIONS: list[tuple[int, str, list[str]]] = [
             )
             """,
             "CREATE INDEX idx_audit_log_actor ON audit_log(actor_id, at)",
+        ],
+    ),
+    (
+        2,
+        "阶段1绑定链路：invitations（SPEC 7 章，审批流/批量开码留阶段2）",
+        [
+            """
+            CREATE TABLE invitations (
+                code TEXT PRIMARY KEY, team TEXT, role TEXT,
+                expires_at TEXT, used_by INTEGER, used_at TEXT
+            )
+            """,
         ],
     ),
 ]

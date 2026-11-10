@@ -32,11 +32,14 @@ STORAGE_FILES = {
 }
 
 
-async def start_scheduler(context: PluginContext) -> None:
+async def start_scheduler(context: PluginContext, *, run_immediately: bool = False) -> None:
     """在 on_activate 回调内调用：恢复水位并启动三通道常驻任务。
 
     本函数只在 activate 阶段执行一次性轻量 IO（读水位记日志），
     周期任务先 sleep 后执行，避免激活路径做重活。
+
+    run_immediately=True（已绑定，SPEC 3.5 首次全量上报）：各通道
+    首轮跳过 sleep 立即执行。
 
     任务统一走 context.resources.task()（官方托管任务：卸载时由
     resources.close() → custody.stop_task 自动停止，否则 check
@@ -46,7 +49,7 @@ async def start_scheduler(context: PluginContext) -> None:
     watermark = await context.storage.aread_json(STORAGE_FILES["watermark"], {})
     context.logger.info(
         "deptagent-link scheduler started",
-        fields={"restored_watermark": watermark},
+        fields={"restored_watermark": watermark, "run_immediately": run_immediately},
     )
 
     channels: tuple[tuple[str, float, Callable[[PluginContext], Awaitable[None]]], ...] = (
@@ -56,7 +59,7 @@ async def start_scheduler(context: PluginContext) -> None:
     )
     for name, interval, action in channels:
         context.resources.task(
-            _channel_loop(context, name, interval, action),
+            _channel_loop(context, name, interval, action, immediate=run_immediately),
             description=f"channel:{name}",
         )
 
@@ -66,14 +69,19 @@ async def _channel_loop(
     name: str,
     interval_seconds: float,
     action: Callable[[PluginContext], Awaitable[None]],
+    *,
+    immediate: bool = False,
 ) -> None:
     """单通道常驻循环：固定周期执行 action；Stale 即安静停机。
 
     容错策略（SPEC 3.7 容错与降级链）：通道失败不终止循环，
     记 warning 后等下个周期重试；指数退避由 T1.4 uploader 接入。
     """
+    first_round = True
     while True:
-        await asyncio.sleep(interval_seconds)
+        if not (first_round and immediate):
+            await asyncio.sleep(interval_seconds)
+        first_round = False
         try:
             await action(context)
             await _touch_watermark(context, name)

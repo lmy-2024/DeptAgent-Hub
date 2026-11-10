@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | v0.6（草案 · 版本口径修订） |
+| 版本 | v0.7（草案 · 令牌存储源码校准） |
 | 状态 | 待审查 |
-| 修订记录 | v0.2：插件约定源码级校准；v0.3：吸收评审——修复 agent_key 唯一性、价格生效时间、归属语义、面板前后端分层，补充上游吸收/单人维护风险与可测验收指标；v0.4：权限模型拍板——四角色（super/admin/lead/member）层级化：super 为账号治理与系统恢复入口、admin 仅由 super 创建、改角色即改权限（不做逐权限位编辑）；v0.5：源码校验复审——修正 WAL 备份/register_provider 语义/429 断言/吊销交互语义，补 devices 表与 UPSERT 字段白名单、双 source 合并 VIEW、API 通用约定与安全算法基线，新增决策点 D9–D11；v0.6：版本口径修正——插件体系断言/依据/复用地图 v2.2.2→v2.3.0b3（源码校准实际版本 + 真机全链路验证），manifest `min` 2.2.2→2.3.0（2.2.x 宿主缺新 SDK 实测不兼容；宿主将 pre-release 归一化为基版本比较，2.3.0b3 真机可装载），数据格式适配器与格式族标签 2_2→2_3 |
+| 修订记录 | v0.2：插件约定源码级校准；v0.3：吸收评审——修复 agent_key 唯一性、价格生效时间、归属语义、面板前后端分层，补充上游吸收/单人维护风险与可测验收指标；v0.4：权限模型拍板——四角色（super/admin/lead/member）层级化：super 为账号治理与系统恢复入口、admin 仅由 super 创建、改角色即改权限（不做逐权限位编辑）；v0.5：源码校验复审——修正 WAL 备份/register_provider 语义/429 断言/吊销交互语义，补 devices 表与 UPSERT 字段白名单、双 source 合并 VIEW、API 通用约定与安全算法基线，新增决策点 D9–D11；v0.6：版本口径修正——插件体系断言/依据/复用地图 v2.2.2→v2.3.0b3（源码校准实际版本 + 真机全链路验证），manifest `min` 2.2.2→2.3.0（2.2.x 宿主缺新 SDK 实测不兼容；宿主将 pre-release 归一化为基版本比较，2.3.0b3 真机可装载），数据格式适配器与格式族标签 2_2→2_3；v0.7：令牌存储源码校准——SDK 无插件侧 secrets 写入 API（config 仅只读快照，加密体系不覆盖插件设置），设备令牌改存 binding.json（本机域 + 可吊销兑底，见 3.5/3.12）；决策点 D1/D2/D3/D5/D7/D8/D11 拍板落定 |
 | 目标读者 | 项目发起人（审查决策）、后续实现者 |
 | 依据 | 与发起人的多轮架构讨论沉淀；QwenPaw v2.3.0b3 插件机制经源码级校验（`plugins/architecture.py`、`sdk.py`、`sdk_version.py`、`validation.py`、`_version_compat.py`）+ 真机验证（hello 模板热装/禁用/启用闭环、`check --runtime` 全绿） |
 | 审查方式 | 重点审查第 15 章"开放决策点"，其余章节为已讨论共识的书面固化 |
@@ -260,7 +260,7 @@ PluginContext 完整能力（13 个公开方法，源码确认）：`on_activate
 
 ### 3.5 首次绑定流程
 
-邀请码 → 服务器校验并签发长期**设备令牌**（可吊销）→ 令牌经 manifest `sdk.secrets` 声明的加密设置机制存储（不落明文，受 QwenPaw 密钥保护体系约束）→ 立即触发首次全量上报（台账 + 历史用量回灌，深度见决策点 D3）。
+邀请码 → 服务器校验并签发长期**设备令牌**（可吊销）→ 令牌存储（**源码校准 v0.7**：2.3.0b3 SDK 仅有 `config.secret()` 只读接口、无插件侧写入 API，且宿主插件设置持久化不在加密路径上——设备令牌实际存 `context.storage` 的 `binding.json`，本机威胁域内可接受：令牌仅能上报本人遥测数据、随时吊销；未来上游开放 secrets 写 API 后迁移）→ 立即触发首次全量上报（台账 + 历史用量回灌，深度见决策点 D3）。
 
 ### 3.6 增量同步算法（usage 通道）
 
@@ -323,7 +323,7 @@ Windows LTSC/受限 PowerShell 场景沿用 QwenPaw 官方兜底方案（手动 
 2. 入口文件（`entry.backend`）必须导出模块级 `plugin` 实例，宿主调用 `plugin.register(self, context: PluginContext)`；
 3. **后台任务/资源只能在 `context.on_activate()` 内创建**，`register()` 内创建抛 `ResourceError`；
 4. `qwenpaw_version` 语义 `>=min, <max`，**max 缺省仅覆盖同 minor patch**——必须显式声明 `max`；
-5. 持久化只写 `~/.qwenpaw/plugin-data/<id>/`（`context.storage`）；令牌等机密走 manifest `sdk.secrets` 声明的加密设置，不落明文；
+5. 持久化只写 `~/.qwenpaw/plugin-data/<id>/`（`context.storage`）；设备令牌存于 `binding.json`（**源码校准 v0.7**：SDK 无插件侧 secrets 写入 API，见 3.5——本机域存储 + 服务端可吊销兑底，升级路径见 3.5）；
 6. 面板 UI 与数据接口分层：`entry.frontend` JS bundle 仅负责展示，数据由后端接口提供（见 3.8）；
 7. 所有 SDK 类型仅从 `qwenpaw.plugins.*` 公共命名空间导入；旧内部接口（如 `api.register_market_provider`）不得使用；
 8. 升级/禁用/替换后旧 context 一切调用抛 `StaleContextError`——视为正常停机信号，安静退出；
@@ -678,9 +678,11 @@ Authorization: Bearer <设备令牌>
 ### 8.2 绑定
 
 ```
-POST /api/v1/bind   {invite_code, employee_no, password?, device_info}
+POST /api/v1/bind   {invite_code, employee_no, name?, password?, device_info}
 → 200 {device_token, server_config}
 ```
+
+- `name?`：员工姓名（v0.7 补入：users.name NOT NULL 而原协议无姓名字段；新建账号时缺省 = 工号，已有账号时忽略）；
 
 - `password?`：员工管理端登录初始密码（可选，不传时由 admin 之后在员工页设定）。member 默认不登录管理端（见决策点 D5），此字段为 D5 拍板"开 member 只读页"预留，避免届时协议变更；
 - `device_info`：设备名与 OS 摘要，入库 `devices`（见 7 章）；

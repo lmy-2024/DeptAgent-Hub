@@ -19,9 +19,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
-from .api import accounts, auth
+from .api import accounts, auth, bind
 from .config import Settings, load_settings
 from .core.auth import LoginRateLimiter
+from .core.bind import BindRateLimiter
 from .core.errors import ApiError, error_response
 from .storage.database import Database
 from .storage.migrations import migrate
@@ -44,6 +45,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.login_limiter = LoginRateLimiter(
             max_failures=s.login_max_failures,
             lock_seconds=s.login_lock_minutes * 60,
+        )
+        app.state.bind_limiter = BindRateLimiter(
+            max_requests=s.bind_rate_limit_per_minute,
         )
         yield
         db.close()
@@ -75,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(accounts.router)
+    app.include_router(bind.router)
 
     # ---- 管理控制台静态站点（T0.8：构建产物存在才挂载）----
 

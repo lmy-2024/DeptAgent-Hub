@@ -8,6 +8,7 @@ register 仅做声明式注册；调度器等后台任务在 context.on_activate
 
 from qwenpaw.plugins import PluginContext
 
+from binding import get_binding
 from scheduler import start_scheduler
 
 PLUGIN_VERSION = "0.1.0"
@@ -22,8 +23,10 @@ class Plugin:
         context.on_activate(self._on_activate)
 
     async def _on_activate(self, context: PluginContext) -> None:
-        # 后台任务的唯一启动点（SPEC 3.2 运行时纪律第 1 条）
-        await start_scheduler(context)
+        # 后台任务的唯一启动点（SPEC 3.2 运行时纪律第 1 条）；
+        # 已绑定 → 首轮立即执行（SPEC 3.5 首次全量上报，采集器 T1.5–T1.7）
+        binding = await get_binding(context)
+        await start_scheduler(context, run_immediately=binding is not None)
 
 
 plugin = Plugin()

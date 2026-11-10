@@ -21,10 +21,10 @@
 - commit: ______
 
 ## T1.3 绑定链路
-- [ ] 服务端 POST /api/v1/bind：IP 限速 10 次/分钟（SPEC 8.2、10.1）
-- [ ] 令牌 secrets.token_urlsafe(32) 签发、库存 SHA-256、明文仅绑定响应返回一次（SPEC 10.1）
-- [ ] 插件 binding.py：输码 → 存 sdk.secrets → 触发首次全量上报（SPEC 3.5）
-- [ ] 单测：错码/过期码/枚举限速
+- [x] 服务端 POST /api/v1/bind：IP 限速 10 次/分钟（SPEC 8.2、10.1）——滑动窗口，成功/失败都计数（防枚举）
+- [x] 令牌 secrets.token_urlsafe(32) 签发、库存 SHA-256、明文仅绑定响应返回一次（SPEC 10.1）——含一次性原子防线（UPDATE WHERE used_by IS NULL）
+- [x] 插件 binding.py：输码 → 存（**v0.7 源码校准**：SDK 无 secrets 写 API，改存 binding.json）→ 触发首次全量上报（run_immediately 机制就位，采集器 T1.5–T1.7）
+- [x] 单测：错码/过期码/枚举限速（10 个测试：含一次性/一人多机/停用员工/密码可登录；40 全绿）
 - commit: ______
 
 ## T1.4 上报端点骨架

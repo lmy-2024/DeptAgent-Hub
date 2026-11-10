@@ -11,12 +11,13 @@
 - [x] plugin.json manifest：id=deptagent-link、type=general、entry、qwenpaw_version min=2.3.0、max=3.0.0、sdk 声明（SPEC 3.2 v0.6）
 - [x] main.py 导出模块级 plugin 实例（SPEC 3.12 第 2 条）
 - [x] `python -m qwenpaw.plugins.check ./deptagent-link` 静态校验通过（实测直跑 --runtime：ok=true、load/activation/cleanup 全 passed、compatible；Windows 需 PYTHONUTF8=1 见 status.md）
-- commit: ______
+- commit: e0559af
 
 ## T1.2 调度器与生命周期
-- [ ] 常驻调度/上报循环只在 on_activate 回调内启动（SPEC 3.2 运行时纪律第 1 条）
-- [ ] StaleContextError → 视为正常停机信号安静退出（SPEC 3.7、3.12 第 8 条）
-- [ ] 离线队列/增量水位/绑定状态存 context.storage（SPEC 3.12 第 5 条）
+- [x] 常驻调度/上报循环只在 on_activate 回调内启动（SPEC 3.2 运行时纪律第 1 条）——实测裸 create_task 会被 check 报 unhosted_task，正确姿势是 context.resources.task()（托管+卸载自动停）
+- [x] StaleContextError → 视为正常停机信号安静退出（SPEC 3.7、3.12 第 8 条）——调度循环内捕获 return + CancelledError 传播；托管任务由 resources.close 兜底停
+- [x] 离线队列/增量水位/绑定状态存 context.storage（SPEC 3.12 第 5 条）——STORAGE_FILES 集中声明三键，水位读写真机验证（restored_watermark 日志）
+- [x] 验证：check --runtime 三次迭代全绿（load/activation/cleanup 全 passed，发现并修复任务托管问题）
 - commit: ______
 
 ## T1.3 绑定链路

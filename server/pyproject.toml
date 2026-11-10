@@ -37,5 +37,11 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI Query 参数声明惯例：调用在导入期执行且每次声明独立，非 B008
+# 意图的共享可变默认；ruff 对部分注解类型（模块级 Literal 别名 / date 等）
+# 的豁免逻辑不生效（T1.10/T1.11 实测两次触发），按官方推荐显式豁免。
+extend-immutable-calls = ["fastapi.Query"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

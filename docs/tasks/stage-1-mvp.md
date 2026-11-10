@@ -78,9 +78,9 @@
 - commit: ______
 
 ## T1.11 用量分析页
-- [ ] 前置拍板：图表库 ECharts / Recharts（SPEC 4.1 遗留空白，T1.11 开工前定）
-- [ ] 四维（人/智能体/模型/科室）× 日/周/月聚合，数据源 usage_report（SPEC 4.2、7.2）
-- [ ] 排行榜 + CSV 导出 UTF-8 with BOM（SPEC 8.5；成本折算列留阶段 2，4.2"成本折算 2"）
+- [x] 前置拍板：图表库 ECharts（SPEC 4.1 遗留空白，用户拍板，D12）——echarts/core 按需引入（Line/Bar + Grid/Legend/Tooltip + Canvas，~278KB gzip）+ EChart.tsx 薄包装（init/dispose 生命周期 + setOption notMerge + ResizeObserver 自适应），T1.12 驾驶舱复用
+- [x] 四维（人/智能体/模型/科室）× 日/周/月聚合，数据源 usage_report（SPEC 4.2、7.2）——GET /admin/usage/aggregate（LeadUser 门槛；维度/粒度白名单 SQL 片段拼接零注入面；周桶归一到周一日期、月桶 YYYY-MM；缺省窗口 30 天，from>to 422）；agent_id 哨兵/NULL → 未归属智能体、model 双列 group、team 快照 COALESCE
+- [x] 排行榜 + CSV 导出 UTF-8 with BOM（SPEC 8.5；成本折算列留阶段 2，4.2"成本折算 2"）——series 本身即排行（total_tokens DESC）；GET /admin/usage/export 宽表 CSV（成员×桶列+合计两列，BOM+CRLF+Content-Disposition）；console blob 下载（JWT 需 header）；单测 75→87 全绿；浏览器 11/11（四维交叉验证/周月桶/窗口过滤/BOM arrayBuffer 验证/403 兑底/深链接）
 - commit: ______
 
 ## T1.12 驾驶舱

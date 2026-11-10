@@ -68,7 +68,11 @@ export default function AppLayout() {
             智能体台账
           </NavLink>
         )}
-        {/* T1.11 用量：交付后挂入（lead+，4.2 权限裁剪） */}
+        {isLead && (
+          <NavLink to="/usage" style={navLink}>
+            用量分析
+          </NavLink>
+        )}
       </nav>
       <main style={{ padding: 24 }}>
         <Outlet />

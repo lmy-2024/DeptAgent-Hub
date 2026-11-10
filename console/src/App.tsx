@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./pages/AppLayout";
 import AgentsPage from "./pages/AgentsPage";
 import EmployeesPage from "./pages/EmployeesPage";
+import UsagePage from "./pages/UsagePage";
 import LoginPage from "./pages/LoginPage";
 import { getSession, isSessionExpired } from "./api/client";
 
@@ -30,7 +31,8 @@ export default function App() {
         <Route index element={<HomePlaceholder />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="agents" element={<AgentsPage />} />
-        {/* T1.11 用量 / T1.12 驾驶舱 … */}
+        <Route path="usage" element={<UsagePage />} />
+        {/* T1.12 驾驶舱（index 替换占位）… */}
       </Route>
     </Routes>
   );

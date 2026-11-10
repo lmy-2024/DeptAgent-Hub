@@ -281,3 +281,73 @@ export interface AgentDetailResponse extends AgentListItem {
 export function getAgent(agentId: number): Promise<AgentDetailResponse> {
   return api(`/api/v1/admin/agents/${agentId}`);
 }
+
+// ---- 用量分析（T1.11，SPEC 4.2 / 7.2 / 8.5；lead+ 门槛）----
+
+export interface UsageBucket {
+  bucket: string;
+  total_tokens: number;
+  call_count: number;
+}
+
+export interface UsageSeriesItem {
+  /** 聚合成员（key=维度键，label=展示名）；series 本身即排行榜（降序）。 */
+  key: string;
+  label: string;
+  total_tokens: number;
+  call_count: number;
+  buckets: UsageBucket[];
+}
+
+export interface UsageAggregateResponse {
+  dimension: string;
+  granularity: string;
+  from_date: string;
+  to_date: string;
+  series: UsageSeriesItem[];
+}
+
+export type UsageDimension = "employee" | "agent" | "model" | "team";
+export type UsageGranularity = "day" | "week" | "month";
+
+export interface UsageQuery {
+  dimension?: UsageDimension;
+  granularity?: UsageGranularity;
+  from_date?: string;
+  to_date?: string;
+}
+
+function usageParams(query: UsageQuery): URLSearchParams {
+  const search = new URLSearchParams();
+  if (query.dimension) search.set("dimension", query.dimension);
+  if (query.granularity) search.set("granularity", query.granularity);
+  if (query.from_date) search.set("from_date", query.from_date);
+  if (query.to_date) search.set("to_date", query.to_date);
+  return search;
+}
+
+export function listUsageAggregate(query: UsageQuery = {}): Promise<UsageAggregateResponse> {
+  const qs = usageParams(query).toString();
+  return api(`/api/v1/admin/usage/aggregate${qs ? `?${qs}` : ""}`);
+}
+
+/** CSV 导出（SPEC 8.5 BOM + CRLF）：JWT 需 header，不能裸 <a href>，blob 下载。 */
+export async function downloadUsageCsv(query: UsageQuery = {}): Promise<Blob> {
+  const qs = usageParams(query).toString();
+  const resp = await fetch(`/api/v1/admin/usage/export${qs ? `?${qs}` : ""}`, {
+    headers: { Authorization: `Bearer ${getToken() ?? ""}` },
+  });
+  if (resp.ok) return resp.blob();
+  let message = `导出失败（HTTP ${resp.status}）`;
+  try {
+    const body = (await resp.json()) as ApiErrorBody;
+    if (body?.error?.message) message = body.error.message;
+  } catch {
+    /* 非 JSON 错误体：用缺省 message */
+  }
+  if (resp.status === 401) {
+    setSession(null);
+    window.location.assign("/login");
+  }
+  throw new ApiRequestError(message, resp.status);
+}

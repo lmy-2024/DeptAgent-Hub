@@ -7,8 +7,8 @@
 
 ## T0.1 git 基线收口（含本任务体系入库）
 - [x] .gitignore 追加：4 个参考仓库、*.zip、本地 db、.env*、.vscode/、node_modules/（SPEC 13.2、10.1）
-- [ ] push 基线 commit：README + LICENSE + docs/SPEC.md + docs/tasks/ + docs/status.md
-- commit: d8ad44d（docs 基线已提交；push 待用户确认）
+- [x] push 基线 commit：README + LICENSE + docs/SPEC.md + docs/tasks/ + docs/status.md（L3 安全审查零发现后推送）
+- commit: d8ad44d / 1a67e0f / f7e02d2 / 7bf94a6（均已推送至 origin/main）
 
 ## T0.2 server 工程骨架
 - [x] server/ 目录：src/deptagent/{api,core,storage} + tests（SPEC 13.1）

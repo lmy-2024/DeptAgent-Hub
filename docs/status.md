@@ -5,7 +5,7 @@
 
 ## 当前状态
 - 阶段：0（工程基座）
-- 当前任务：T0.1–T0.8 已推送；T0.9 真机 spike 全通过 + SPEC v0.6 + T0.10 走查完成（均待用户 commit；之后 `git tag stage-0` 收口，阶段 1 task 文件再生成）
+- 当前任务：阶段 0 全部完成（收口 commit 6f278d8 + hash 回填 commit；tag stage-0 于 push 前打上）；下一步进入阶段 1（T1.1 插件包骨架，开工前拍板 D2/D3/D5/D7）
 - 最后更新：2026-11-10
 
 ## 已完成
@@ -22,7 +22,7 @@
 - T1.11 前：图表库 ECharts / Recharts（SPEC 4.1 遗留空白）
 
 ## 环境事实（中断后恢复用）
-- 本地 git：remote origin = https://github.com/lmy-2024/DeptAgent-Hub.git，已推送至 7bf94a6，本地与远程同步；GitHub Actions CI（lint+单测）已首次触发
+- 本地 git：remote origin = https://github.com/lmy-2024/DeptAgent-Hub.git，已推送至 eba2060；本地新增阶段 0 收口 commits（6f278d8 + 回填）与 tag stage-0 待推送；GitHub Actions CI（lint+单测）已首次触发
 - 4 个参考仓库（QwenPaw-main 等）已确认从未被 git 跟踪，.gitignore 已加排除规则
 - 宿主机 Windows + PowerShell 5.1：命令连接用 `;`，不用 `&&`
 - Python 3.14 + server/.venv 独立虚拟环境（依赖全隔离，pip 清华源安装）；服务启动：`server\.venv\Scripts\python.exe -m uvicorn deptagent.app:create_app --factory`，需设 `DEPTAGENT_DB_PATH` / `DEPTAGENT_JWT_SECRET`

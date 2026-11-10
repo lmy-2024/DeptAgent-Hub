@@ -218,3 +218,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- DeptAgent-Hub 项目专用（SPEC 13.2 / 9.1 / 10.1）----
+# 参考仓库：仅本地阅读，不入库（仓库体积 + 版权归属）
+QwenPaw-main/
+agentscope-main/
+langchain-master/
+langgraph-main/
+*.zip
+
+# 本地数据库与机密（WAL 伴生文件一并排除）
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+.env.*
+
+# IDE 本地配置与 Node 依赖
+.vscode/
+node_modules/
+
+# 前端构建产物与 TS 增量缓存（dist/ 已由上方通用规则覆盖）
+*.tsbuildinfo

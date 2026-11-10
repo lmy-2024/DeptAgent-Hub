@@ -2,13 +2,13 @@
 
 > 验收锚点：SPEC 14.1 全 8 条 + SPEC 3.11 插件验收
 > 里程碑（SPEC 11 章阶段 1 行）：10 名试点员工数据上墙
-> 前置：阶段 0 收口；开工前拍板 D2/D3/D5/D7（SPEC 15 章，均有倾向值）
+> 前置：阶段 0 收口；开工前拍板 D2/D3/D5/D7（SPEC 15 章，均有倾向值）；真机宿主 qwenpaw 2.3.0b3 已就位（T0.9 实测），插件任务可真机验证
 > 竖切纪律：每条链 = 插件采集 → 端点 → UPSERT 白名单 → 落库 → 页面可查，逐链交付
 
 ## 插件端
 
 ## T1.1 插件包骨架
-- [ ] plugin.json manifest：id=deptagent-link、type=general、entry、qwenpaw_version max=3.0.0、sdk 声明（SPEC 3.2）
+- [ ] plugin.json manifest：id=deptagent-link、type=general、entry、qwenpaw_version min=2.3.0、max=3.0.0、sdk 声明（SPEC 3.2 v0.6）
 - [ ] main.py 导出模块级 plugin 实例（SPEC 3.12 第 2 条）
 - [ ] `python -m qwenpaw.plugins.check ./deptagent-link` 静态校验通过
 - commit: ______

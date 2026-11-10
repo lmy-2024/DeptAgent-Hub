@@ -53,12 +53,12 @@
 - commit: f7e02d2
 
 ## T0.9 插件真机 spike（风险前置，可与 T0.2–T0.8 并行）
-- [ ] 以官方 templates/hello 为底，跑通安装 → 激活 → 禁用（SPEC 3.2）
-- [ ] `python -m qwenpaw.plugins.check <目录> --runtime` 全绿（SPEC 3.9）
-- [ ] 实测结论记录到 docs/status.md（源码断言 → 真机验证，QwenPaw v2.2.2）
-- commit: ______（spike 代码可不入库，结论记录必须入库）
+- [x] 以官方 templates/hello 为底，跑通安装 → 激活 → 禁用（SPEC 3.2）
+- [x] `python -m qwenpaw.plugins.check <目录> --runtime` 全绿（SPEC 3.9）
+- [x] 实测结论记录到 docs/status.md（源码断言 → 真机验证，真机宿主已升级 qwenpaw 2.3.0b3；SPEC 版本口径已随本次实测修订至 v0.6）
+- commit: ______（spike 代码不入库，结论记录必须入库）
 
 ## T0.10 阶段 0 收口
-- [ ] SPEC 14.1 第 8 条逐项走查（8 个子项全过）
-- [ ] git tag stage-0；docs/status.md 更新阶段状态
+- [x] SPEC 14.1 第 8 条逐项走查（8 个子项全过；lead 写入口缺口已补测，单测 30 全绿 + ruff）
+- [ ] git tag stage-0；docs/status.md 更新阶段状态（待用户 commit 后打 tag）
 - commit: ______

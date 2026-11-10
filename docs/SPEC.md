@@ -2,11 +2,11 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 版本 | v0.5（草案 · 评审修订版） |
+| 版本 | v0.6（草案 · 版本口径修订） |
 | 状态 | 待审查 |
-| 修订记录 | v0.2：插件约定源码级校准；v0.3：吸收评审——修复 agent_key 唯一性、价格生效时间、归属语义、面板前后端分层，补充上游吸收/单人维护风险与可测验收指标；v0.4：权限模型拍板——四角色（super/admin/lead/member）层级化：super 为账号治理与系统恢复入口、admin 仅由 super 创建、改角色即改权限（不做逐权限位编辑）；v0.5：源码校验复审——修正 WAL 备份/register_provider 语义/429 断言/吊销交互语义，补 devices 表与 UPSERT 字段白名单、双 source 合并 VIEW、API 通用约定与安全算法基线，新增决策点 D9–D11 |
+| 修订记录 | v0.2：插件约定源码级校准；v0.3：吸收评审——修复 agent_key 唯一性、价格生效时间、归属语义、面板前后端分层，补充上游吸收/单人维护风险与可测验收指标；v0.4：权限模型拍板——四角色（super/admin/lead/member）层级化：super 为账号治理与系统恢复入口、admin 仅由 super 创建、改角色即改权限（不做逐权限位编辑）；v0.5：源码校验复审——修正 WAL 备份/register_provider 语义/429 断言/吊销交互语义，补 devices 表与 UPSERT 字段白名单、双 source 合并 VIEW、API 通用约定与安全算法基线，新增决策点 D9–D11；v0.6：版本口径修正——插件体系断言/依据/复用地图 v2.2.2→v2.3.0b3（源码校准实际版本 + 真机全链路验证），manifest `min` 2.2.2→2.3.0（2.2.x 宿主缺新 SDK 实测不兼容；宿主将 pre-release 归一化为基版本比较，2.3.0b3 真机可装载），数据格式适配器与格式族标签 2_2→2_3 |
 | 目标读者 | 项目发起人（审查决策）、后续实现者 |
-| 依据 | 与发起人的多轮架构讨论沉淀；QwenPaw v2.2.2 插件机制经源码级校验（`plugins/architecture.py`、`sdk.py`、`sdk_version.py`、`validation.py`、官方模板 `templates/hello`） |
+| 依据 | 与发起人的多轮架构讨论沉淀；QwenPaw v2.3.0b3 插件机制经源码级校验（`plugins/architecture.py`、`sdk.py`、`sdk_version.py`、`validation.py`、`_version_compat.py`）+ 真机验证（hello 模板热装/禁用/启用闭环、`check --runtime` 全绿） |
 | 审查方式 | 重点审查第 15 章"开放决策点"，其余章节为已讨论共识的书面固化 |
 
 ---
@@ -139,7 +139,7 @@ graph TB
 
 ### 3.2 插件包结构（对齐 QwenPaw 官方插件 SDK 约定，已源码校准）
 
-QwenPaw v2.2.2 插件体系核心事实（源码验证）：
+QwenPaw v2.3.0b3 插件体系核心事实（源码验证 + 真机验证）：
 
 - 安装位置：`~/.qwenpaw/plugins/<plugin_id>/`（`PLUGINS_DIR`），每插件一目录；支持 zip 导入安装（Console 插件页 / REST `/plugins` / CLI）；
 - manifest `plugin.json` 由 Pydantic `PluginManifest` 校验，未知顶层字段忽略；
@@ -161,7 +161,7 @@ deptagent-link/
 │   └── usage.py                 # ③ Token 用量(含增量 diff)
 ├── adapters/
 │   ├── base.py                  # Reader 接口 + 格式探测/降级判定
-│   └── qwenpaw_2_2.py           # QwenPaw 2.2.x 数据格式适配器
+│   └── qwenpaw_2_3.py           # QwenPaw 2.3.x 数据格式适配器
 ├── uploader.py                  # 批量上报 + 指数退避 + 幂等
 ├── scheduler.py                 # 常驻调度(仅可在 on_activate 内启动)
 ├── panel/                       # 员工侧面板前端(entry.frontend bundle)
@@ -178,7 +178,7 @@ deptagent-link/
   "description": "将本机 QwenPaw 接入部门智通：上报心跳、智能体台账与 Token 用量",
   "type": "general",
   "entry": { "backend": "main.py", "frontend": "panel/index.js" },
-  "qwenpaw_version": { "min": "2.2.2", "max": "3.0.0" },
+  "qwenpaw_version": { "min": "2.3.0", "max": "3.0.0" },
   "sdk": {
     "version": "1.0.0",
     "capabilities": ["storage", "logging", "config", "events", "commands", "providers"],
@@ -194,7 +194,7 @@ deptagent-link/
 | `id` / `version` | 必填；id 匹配 `[A-Za-z0-9][A-Za-z0-9_-]*` |
 | `type` | 枚举值：`tool/provider/hook/command/channel/hub/memory/frontend/app/general`；缺省按 `meta` 推断。本插件为多能力插件，取 `general` |
 | `entry.backend` | Python 入口；`entry.frontend` 为前端 JS bundle 入口（见 3.8）；`entry.descriptor` 与 backend 互斥 |
-| `qwenpaw_version` | `{min, max}`，语义 `>=min, <max`（左闭右开）；**max 缺省 = min 同 minor 的全部 patch 版本**。本插件显式 `max: "3.0.0"` 以覆盖 2.x 全系 |
+| `qwenpaw_version` | `{min, max}`，语义 `>=min, <max`（左闭右开）；**max 缺省 = min 同 minor 的全部 patch 版本**。本插件 `min: "2.3.0"`（新插件 SDK 自 2.3 起；宿主将 pre-release 版本归一化为基版本比较，2.3.0b3 真机可装载）+ 显式 `max: "3.0.0"` 覆盖 2.3.x 至 3.0.0 前全部版本 |
 | `sdk.version` | 当前宿主 SDK 版本为 `1.0.0`；请求版本须同 major 且 ≤ 宿主支持版本 |
 | `sdk.capabilities` | 合法值共 18 个：`tools/logging/models/resources/storage/messages/config/commands/hooks/prompts/modes/skills/markets/providers/memory/events/apps/channels` |
 | `sdk.secrets` | 声明插件需要的加密设置名（设备令牌走此机制，不落明文） |
@@ -288,7 +288,7 @@ PluginContext 完整能力（13 个公开方法，源码确认）：`on_activate
 
 ### 3.9 版本兼容与自更新
 
-- manifest 声明 `qwenpaw_version`：语义 `>=min, <max`（左闭右开）；**max 缺省时仅覆盖 min 同 minor 的 patch 版本**（如 min=2.2.2 无 max → 仅允许 2.2.x）——因此本插件显式声明 `max: "3.0.0"` 覆盖 2.x 全系，3.0 发布时再评估抬升；
+- manifest 声明 `qwenpaw_version`：语义 `>=min, <max`（左闭右开）；**max 缺省时仅覆盖 min 同 minor 的 patch 版本**（如 min=2.2.2 无 max → 仅允许 2.2.x）——本插件声明 `min: "2.3.0", max: "3.0.0"`（覆盖 2.3.x 及后续 2.x minor，3.0 发布时再评估抬升；宿主对 pre-release 按基版本归一化比较，2.3.0b3 真机满足 min）；
 - `sdk.version` 声明 `1.0.0`（宿主 SDK 主版本内兼容）；适配层运行时结构嗅探探测本地数据格式；
 - 心跳响应携带 `plugin_latest`，面板提示一键更新；
 - **官方验证工具链**（纳入本插件 CI）：`python -m qwenpaw.plugins.check <插件目录>`（静态校验 manifest/入口/导入）、`--runtime`（在隔离测试宿主 PluginTestHost 中真实执行加载/激活/清理，可用 `PluginTestHost.call_tool` 驱动工具）；
@@ -307,7 +307,7 @@ Windows LTSC/受限 PowerShell 场景沿用 QwenPaw 官方兜底方案（手动 
 
 ### 3.11 插件验收标准
 
-1. 全新 QwenPaw 2.2.2 + 插件安装绑定，10 分钟内管理端可见三通道数据；
+1. 全新 QwenPaw 2.3.x + 插件安装绑定，10 分钟内管理端可见三通道数据；
 2. 断网 24h 恢复：数据补传、计数无重复（幂等验证）；
 3. 卸载插件后 QwenPaw 功能无损、无残留后台任务；
 4. 篡改本地 token 文件模拟格式破坏：降级仅心跳、面板黄灯、管理端收到事件；
@@ -653,9 +653,9 @@ WHERE u.source = 'gateway'
 POST /api/v1/telemetry/report
 Authorization: Bearer <设备令牌>
 {
-  "device": {"name": "PC-ZS001", "os": "Windows 11", "client_version": "2.2.2",
+  "device": {"name": "PC-ZS001", "os": "Windows 11", "client_version": "2.3.0b3",
              "plugin_version": "1.0.0", "uptime_hours": 6.5, "binding_status": "ok",
-             "format_probe": "qwenpaw-2.2", "reporting_paused": false},
+             "format_probe": "qwenpaw-2.3", "reporting_paused": false},
   "seq": 128,
   "agents": [
     {"agent_key": "finance-report", "name": "财务周报助手",
@@ -903,7 +903,7 @@ git push -u origin main
 
 | 参考项目 | 复用内容 | 复用方式 |
 | --- | --- | --- |
-| QwenPaw v2.2.2 | 员工客户端本体；公共插件 SDK（`PluginContext` 13 个注册方法、`on_activate` 生命周期纪律、`sdk.secrets` 加密设置、`entry.frontend` 前端插槽体系、`qwenpaw.plugins.check --runtime` 验证工具链）；hub 的邀请注册/管理 API/多租户思路；token_usage 字段口径（date/provider_id/model/agent_id + prompt/completion/cache_read/cache_write/call_count 分列，`agent_id` 可空，`QWENPAW_TOKEN_USAGE_FILE` 可覆盖）；console 前端结构范式；Windows LTSC 安装兜底经验 | 零 fork，仅外挂插件；架构借鉴 |
+| QwenPaw v2.3.0b3 | 员工客户端本体；公共插件 SDK（`PluginContext` 13 个注册方法、`on_activate` 生命周期纪律、`sdk.secrets` 加密设置、`entry.frontend` 前端插槽体系、`qwenpaw.plugins.check --runtime` 验证工具链）；hub 的邀请注册/管理 API/多租户思路；token_usage 字段口径（date/provider_id/model/agent_id + prompt/completion/cache_read/cache_write/call_count 分列，`agent_id` 可空，`QWENPAW_TOKEN_USAGE_FILE` 可覆盖）；console 前端结构范式；Windows LTSC 安装兑底经验 | 零 fork，仅外挂插件；架构借鉴 |
 | agentscope | FastAPI `router/service/manager/storage` 分层范式；session/workspace 组织思路 | 架构借鉴 |
 | LangGraph | 阶段四部门共享智能体的图编排、checkpoint、interrupt 人工审批 | 远期集成 |
 | LangChain | 模型/工具抽象规范 | 远期配套 |

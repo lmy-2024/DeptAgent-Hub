@@ -90,6 +90,22 @@ def test_admin_self_promotion_attempt_rejected(client, admin_token, db):
     )
 
 
+def test_lead_cannot_call_any_governance_endpoint(client, lead_token):
+    # 14.1 第 8 条：lead 无任何写操作入口（阶段 0 为 API 层验证；
+    # console 登录页入口 T1.8 交付后由前端路由守卫 + 后端兑底复验）
+    endpoints = [
+        ("post", "/api/v1/admin/accounts", {"employee_no": "X2", "name": "x", "role": "member"}),
+        ("patch", "/api/v1/admin/accounts/1/role", {"role": "member"}),
+        ("post", "/api/v1/admin/accounts/1/reset-password", {}),
+        ("post", "/api/v1/admin/accounts/1/disable", None),
+    ]
+    for method, path, payload in endpoints:
+        call = getattr(client, method)
+        resp = call(path, json=payload, headers=_auth(lead_token))
+        assert resp.status_code == 403, f"{method.upper()} {path} 应拒绝 lead"
+        assert resp.json()["error"]["code"] == "forbidden_role"
+
+
 # ---- 角色即时生效（14.1 第 8 条：改角色即改权限）----
 
 

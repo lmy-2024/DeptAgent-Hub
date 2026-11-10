@@ -85,3 +85,23 @@ def admin_token(client, admin_account) -> str:
     resp = client.post("/api/v1/auth/login", json=admin_account)
     assert resp.status_code == 200, resp.text
     return resp.json()["token"]
+
+
+@pytest.fixture()
+def lead_account(client, super_token) -> dict[str, str]:
+    _create_account(
+        client,
+        super_token,
+        employee_no="L001",
+        name="领导甲",
+        role="lead",
+        password="lead-pass-123456",
+    )
+    return {"employee_no": "L001", "password": "lead-pass-123456"}
+
+
+@pytest.fixture()
+def lead_token(client, lead_account) -> str:
+    resp = client.post("/api/v1/auth/login", json=lead_account)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["token"]

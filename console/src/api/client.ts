@@ -351,3 +351,40 @@ export async function downloadUsageCsv(query: UsageQuery = {}): Promise<Blob> {
   }
   throw new ApiRequestError(message, resp.status);
 }
+
+// ---- 驾驶舱（T1.12，SPEC 4.2 / 3.4；lead+ 门槛）----
+
+export interface OfflineDevice {
+  device_id: number;
+  device_name: string | null;
+  user_id: number;
+  user_name: string;
+  employee_no: string;
+  team: string | null;
+  last_heartbeat: string | null;
+}
+
+export interface TrendPoint {
+  date: string;
+  total_tokens: number;
+}
+
+export interface TeamTopItem {
+  team: string;
+  total_tokens: number;
+}
+
+/** 驾驶舱（4.2）：KPI 四卡 + 离线告警（3.4 排除主动暂停）+ 30 天趋势 + 科室 Top。 */
+export interface DashboardResponse {
+  agents_total: number;
+  agents_active_30d: number;
+  month_tokens: number;
+  employees_active_30d: number;
+  offline_devices: OfflineDevice[];
+  trend: TrendPoint[];
+  team_top: TeamTopItem[];
+}
+
+export function getDashboard(): Promise<DashboardResponse> {
+  return api("/api/v1/admin/dashboard");
+}

@@ -84,9 +84,9 @@
 - commit: ______
 
 ## T1.12 驾驶舱
-- [ ] KPI 卡：智能体总数/活跃数、本月 Token 与成本、活跃员工数、离线设备告警（SPEC 4.2）
-- [ ] 离线告警排除 reporting_paused=1 设备（SPEC 3.4、4.2 注）
-- [ ] 趋势图 + 部门 Top 榜（SPEC 4.2）
+- [x] KPI 卡：智能体总数/活跃数、本月 Token 与成本、活跃员工数、离线设备告警（SPEC 4.2）——GET /admin/dashboard（LeadUser；DashboardResponse 7 字段）；活跃口径 = 近 30 天 usage_report 出现（与台账 status 解耦，阶段 1 status 全 new）；成本不显示（无单价表宁缺毋滥，阶段 2）；console DashboardPage 四卡（fmtTokens 千分位）+ member 首页分流落地提示（不调 API 避免打开即 403，员工侧功能 T1.13 插件面板承接）
+- [x] 离线告警排除 reporting_paused=1 设备（SPEC 3.4、4.2 注）——SQL 条件 COALESCE(d.reporting_paused, 0)=0；离线判定 Python 端 is_online()（ISO 带时区偏移的 last_heartbeat 与 sqlite datetime() 字符串比较不可靠）；告警区块红/绿双态 + 暂停设备不泄漏；驾驶舱 NavLink 补 isLead 门控（4.2 导航裁剪补齐）
+- [x] 趋势图 + 部门 Top 榜（SPEC 4.2）——服务端 30 天逐日补零（连续时间轴）+ team_top LIMIT 10；EChart 复用（趋势 Line areaStyle + Top Bar 横向）；单测 87→93 全绿（+6 dashboard：403/空态/KPI/离线矩阵/趋势 Top）+ ruff 全绿 + build + 浏览器 9/9（KPI 数值/离线矩阵/双 canvas/导航权限/刷新/403 兑底/JSON 交叉验证）
 - commit: ______
 
 ## T1.13 员工面板（插件内）

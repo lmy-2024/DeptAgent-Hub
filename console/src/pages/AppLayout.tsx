@@ -55,9 +55,11 @@ export default function AppLayout() {
           flexWrap: "wrap",
         }}
       >
-        <NavLink to="/" end style={navLink}>
-          驾驶舱
-        </NavLink>
+        {isLead && (
+          <NavLink to="/" end style={navLink}>
+            驾驶舱
+          </NavLink>
+        )}
         {isAdmin && (
           <NavLink to="/employees" style={navLink}>
             员工与设备

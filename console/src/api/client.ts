@@ -201,3 +201,83 @@ export function revokeDevice(
 ): Promise<{ device_id: number; status: string; message: string }> {
   return api(`/api/v1/admin/devices/${deviceId}/revoke`, { method: "POST" });
 }
+
+// ---- 智能体台账（T1.10，SPEC 4.2 / 5.3 / 8.5 分页；lead+ 门槛）----
+
+export interface AgentListItem {
+  id: number;
+  agent_key: string;
+  name: string;
+  description: string | null;
+  status: string;
+  shared: number;
+  category: string | null;
+  tags: string | null;
+  definition_key: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  owner_user_id: number;
+  owner_name: string;
+  owner_employee_no: string;
+  team: string | null;
+  maintainer_user_id: number | null;
+  maintainer_name: string | null;
+  maintainer_employee_no: string | null;
+  total_tokens: number;
+}
+
+export type AgentStatusFilter = "new" | "active" | "archived" | "blocked";
+
+export interface ListAgentsQuery {
+  page?: number;
+  page_size?: number;
+  sort?: string;
+  status?: AgentStatusFilter;
+  team?: string;
+  q?: string;
+}
+
+export function listAgents(query: ListAgentsQuery = {}): Promise<Paged<AgentListItem>> {
+  const search = new URLSearchParams();
+  if (query.page) search.set("page", String(query.page));
+  if (query.page_size) search.set("page_size", String(query.page_size));
+  if (query.sort) search.set("sort", query.sort);
+  if (query.status) search.set("status", query.status);
+  if (query.team) search.set("team", query.team);
+  if (query.q) search.set("q", query.q);
+  const qs = search.toString();
+  return api(`/api/v1/admin/agents${qs ? `?${qs}` : ""}`);
+}
+
+export interface UsagePoint {
+  stat_date: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  call_count: number;
+  total_tokens: number;
+}
+
+export interface UsageSummary {
+  total_tokens: number;
+  call_count: number;
+  days: number;
+}
+
+export interface TimelineEvent {
+  at: string;
+  event: string;
+  label: string;
+}
+
+/** 详情抽屉数据源（4.2）：基础字段同列表 + 用量序列/汇总/时间线。 */
+export interface AgentDetailResponse extends AgentListItem {
+  usage_series: UsagePoint[];
+  usage_summary: UsageSummary;
+  timeline: TimelineEvent[];
+}
+
+export function getAgent(agentId: number): Promise<AgentDetailResponse> {
+  return api(`/api/v1/admin/agents/${agentId}`);
+}

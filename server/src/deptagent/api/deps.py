@@ -1,4 +1,4 @@
-"""公共依赖：DB、当前用户、super 门槛。
+"""公共依赖：DB、当前用户、super / admin / lead 门槛。
 
 关键设计（SPEC 1.3"改角色即改权限"）：JWT 仅携带 sub=employee_no，
 角色与状态每次请求查库取最新值——角色调整/停用对已签发 token 即时生效，
@@ -71,3 +71,14 @@ def require_admin(user: CurrentUser) -> sqlite3.Row:
 
 
 AdminUser = Annotated[sqlite3.Row, Depends(require_admin)]
+
+
+def require_lead(user: CurrentUser) -> sqlite3.Row:
+    """lead 门槛（SPEC 4.2：台账/用量/驾驶舱页可见角色 lead / admin / super；
+    member 阶段 1 不登录管理端（D5），权限兑底拒绝）。"""
+    if user["role"] not in ("lead", "admin", "super"):
+        raise ApiError(403, "forbidden_role", "仅领导及以上可访问")
+    return user
+
+
+LeadUser = Annotated[sqlite3.Row, Depends(require_lead)]

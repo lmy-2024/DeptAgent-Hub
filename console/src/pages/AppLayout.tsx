@@ -15,6 +15,8 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const session = getSession();
   const isAdmin = session?.role === "admin" || session?.role === "super";
+  // 台账/用量/驾驶舱（4.2）：lead+ 可见；member 不显示（服务端 403 兑底）
+  const isLead = isAdmin || session?.role === "lead";
 
   function onLogout() {
     setSession(null); // 清除 JWT 会话 → 守卫随即弹回登录页
@@ -61,7 +63,12 @@ export default function AppLayout() {
             员工与设备
           </NavLink>
         )}
-        {/* T1.10 台账 / T1.11 用量：交付后按 lead+ 渐次挂入（4.2 权限裁剪） */}
+        {isLead && (
+          <NavLink to="/agents" style={navLink}>
+            智能体台账
+          </NavLink>
+        )}
+        {/* T1.11 用量：交付后挂入（lead+，4.2 权限裁剪） */}
       </nav>
       <main style={{ padding: 24 }}>
         <Outlet />

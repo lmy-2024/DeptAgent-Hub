@@ -5,8 +5,8 @@
 
 ## 当前状态
 - 阶段：1（MVP 竖切）
-- 当前任务：T1.9 员工与设备页完成；下一步 T1.10 智能体台账页（六列 + 筛选 + 详情抽屉）
-- 后挂事项：无（origin/main = 40372cd = 本地 HEAD；后续每任务 commit 后照常 L3+push）
+- 当前任务：T1.10 智能体台账页完成；下一步 T1.11 用量分析页（前置拍板：图表库 ECharts / Recharts）
+- 后挂事项：无（origin/main = 95b1c28 = 本地 HEAD；后续每任务 commit 后照常 L3+push）
 - 最后更新：2026-11-10
 
 ## 已完成
@@ -24,7 +24,8 @@
 - [x] T1.6 台账通道：插件 adapters/{base,qwenpaw_2_3}.py（3.12 包结构落地：working_dir 定位复刻宿主 constant.py 优先级 + AgentReader 协议 + detect_format 降级判定；2.3 格式族读真机 config.json agents.profiles + workspace agent.json 仅取 name/description/enabled）+ collectors/agents.py（asyncio.to_thread 文件 IO）；服务端迁移 003 agents 表 + _store_agents UPSERT（8.1 归属：owner=令牌对应员工、维护人默认同创建人；7.1 白名单：客户端只可更新 name/description/last_seen，status INSERT 首写 new、blocked 永不被覆盖；多员工同名 key 各自成行）；心跳 format_probe 接真实探测；端到端冒烟：真机双智能体全链路落库；单测 48→50 全绿 + check --runtime 全绿；4ae8241+a50bd7c 网络自愈后已推送（1ed99b8..a50bd7c）
 - [x] T1.7 用量通道：插件 collectors/usage.py（3.6 增量算法：当日全量重传 + 历史日 md5 指纹变化重传，上报成功才 commit 水位，90 天窗口外不报不记）+ adapters read_usage（真机 token_usage.json {date: {key: {...}}}，旧记录无 agent_id/cache_* 归一）+ scheduler 三通道接真实增量；服务端迁移 004 usage_daily 表 + usage_report VIEW（7.2 双 source 合并）+ _store_usage（归属解析仅限本人台账、agent_id=0 哨兵、team INSERT 首写快照、provider/model None 归一空串防 UNIQUE NULL 不判重）；端到端冒烟：真机今日 3 条上报落库 + 103 天前窗口外跳过 + 两轮重传幂等；单测 50→54 全绿 + check --runtime 全绿
 - [x] T1.8 console 登录页：client.ts 重构（Session 对象存 localStorage：token/expires_at/role/display_name + isSessionExpired 主动过期检查 + login 请求 auth:false 不走全局 401 跳转——登录失败文案直抛表单）+ LoginPage（服务端 8.5 中文文案展示）+ RequireAuth 路由守卫（未登录/过期 → /login；有效会话访问 /login → /）+ AppLayout（用户信息 + 退出登录）；浏览器三场景实测（守卫/失败文案/成功+退出）+ 锁定文案链路验证全过；tsc + vite build 全过（commit 40372cd，用户自推 T1.7+fix(ci)，本轮补推 T1.8）
-- [x] T1.9 员工与设备页：服务端 core/employees.py + api/employees.py 五端点（员工分页聚合/邀请码生成列表/设备子表/令牌吊销；AdminUser 门槛 admin+super；在线灯 3×心跳周期；DA-XXXXXXXX 邀请码；吊销幂等 + 审计 invitation.create/device.revoke）+ console EmployeesPage（心跳灯/角色裁剪导航/邀请码面板/设备展开/吊销确认）+ **SPA 深链接 fallback 补丁**（SPAStaticFiles：非 API 404 → index.html，API 保持 8.5 JSON；Windows path 分隔符坑改用 scope 原始路径判断）；单测 54→67 全绿（+10 employees + 3 SPA）+ ruff format/check 全过 + tsc/vite build + 浏览器 18/18 实测（含 lead 导航裁剪/403 文案/吊销链路）
+- [x] T1.9 员工与设备页：服务端 core/employees.py + api/employees.py 五端点（员工分页聚合/邀请码生成列表/设备子表/令牌吊销；AdminUser 门槛 admin+super；在线灯 3×心跳周期；DA-XXXXXXXX 邀请码；吊销幂等 + 审计 invitation.create/device.revoke）+ console EmployeesPage（心跳灯/角色裁剪导航/邀请码面板/设备展开/吊销确认）+ **SPA 深链接 fallback 补丁**（SPAStaticFiles：非 API 404 → index.html，API 保持 8.5 JSON；Windows path 分隔符坑改用 scope 原始路径判断）；单测 54→67 全绿（+10 employees + 3 SPA）+ ruff format/check 全过 + tsc/vite build + 浏览器 18/18 实测（含 lead 导航裁剪/403 文案/吊销链路）（commit 95b1c28 已推送）
+- [x] T1.10 智能体台账页：服务端 core/agents.py + api/agents.py 两端点（require_lead：member 403 兑底；六列 JOIN + total_tokens 关联子查询 + 状态 Literal 422/科室/关键词筛选 + 排序白名单 + 8.5 分页；详情：90 天 usage_series + 全期汇总 + timeline 快照节点）+ console AgentsPage（状态徽标 new=待确认/状态与排序立即生效/科室关键词表单/详情抽屉右侧滑出：基础信息 dl + 汇总三卡 + SVG polyline 曲线悬停明细 + 垂直时间线）+ AppLayout 导航 lead+ 裁剪；单测 67→75 全绿（+8 agents）+ ruff 全绿 + tsc/vite build + 浏览器 9/9 实测；坑：Query 参数注解引模块级 Literal 别名触发 ruff B008（同形态 str 注解不触发），内联 Literal 修复
 
 ## 卡点 / 待拍板（SPEC 15 章）
 - 已拍板（2026-11-10，用户授权按倾向值落定）：D1 插件命名 deptagent-link、D2 上报频率 5/15/5 min（用量/台账/心跳）、D3 回灌深度台账全量+用量 90 天、D5 员工仅插件面板、D7 注册模式 closed、D8 官方前端插件（PawApp 数据层）、D11 Argon2id（既成实现）；此前 D6 License=Apache-2.0

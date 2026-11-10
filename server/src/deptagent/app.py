@@ -20,7 +20,7 @@ from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
 from . import __version__
-from .api import accounts, auth, bind, employees, telemetry
+from .api import accounts, agents, auth, bind, employees, telemetry
 from .config import Settings, load_settings
 from .core.auth import LoginRateLimiter
 from .core.bind import BindRateLimiter
@@ -100,6 +100,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(bind.router)
     app.include_router(telemetry.router)
     app.include_router(employees.router)
+    app.include_router(agents.router)
 
     # ---- 管理控制台静态站点（T0.8：构建产物存在才挂载；
     # 深链接 fallback 由 SPAStaticFiles 提供，T1.9 补齐）----

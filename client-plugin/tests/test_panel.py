@@ -8,7 +8,6 @@ handler 本体是纯编排逻辑）。
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
@@ -19,62 +18,13 @@ import scheduler
 from binding import BindError
 from collectors import usage as usage_mod
 from config import REPORTING_PAUSED_FILE, STORAGE_FILES
+from fakes import FakeContext
 from uploader import employee_paused
-
-
-class FakeStorage:
-    """内存实现 context.storage（aread/awrite/adelete）。"""
-
-    def __init__(self) -> None:
-        self._files: dict[str, object] = {}
-
-    async def aread_json(self, name: str, default=None):
-        return self._files.get(name, default)
-
-    async def awrite_json(self, name: str, value) -> None:
-        self._files[name] = value
-
-    async def adelete(self, name: str) -> None:
-        self._files.pop(name, None)
-
-
-class FakeLogger:
-    def __init__(self) -> None:
-        self.lines: list[str] = []
-
-    def info(self, message: str, fields: dict | None = None) -> None:
-        self.lines.append(message)
-
-    def warning(self, message: str, fields: dict | None = None) -> None:
-        self.lines.append(message)
-
-
-class FakeResources:
-    """托管任务桩：记录 description 并关闭协程（不真正执行）。"""
-
-    def __init__(self) -> None:
-        self.descriptions: list[str] = []
-
-    def task(self, coro, description: str | None = None):
-        self.descriptions.append(description or "")
-        coro.close()
-
-
-class FakeContext:
-    def __init__(self) -> None:
-        self.storage = FakeStorage()
-        self.logger = FakeLogger()
-        self.resources = FakeResources()
 
 
 def _request(body: dict | None = None) -> HttpRequest:
     payload = b"" if body is None else json.dumps(body).encode("utf-8")
     return HttpRequest("POST", "/panel", {}, {}, {}, payload)
-
-
-@pytest.fixture
-def context() -> FakeContext:
-    return FakeContext()
 
 
 @pytest.fixture(autouse=True)

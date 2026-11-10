@@ -98,8 +98,8 @@
 ## 收口
 
 ## T1.14 插件自检与 CI 冒烟
-- [ ] diagnostics.py：自检/手动同步/诊断导出（SPEC 3.2 包结构）
-- [ ] CI 接入 check --runtime + 三通道冒烟（SPEC 3.9 升级验证流水线）
+- [x] diagnostics.py：自检/手动同步/诊断导出（SPEC 3.2 包结构）——self_check（本地五项聚合 + 服务器 /health 可达探测，纯只读不发遥测不占 seq；verdict ∈ not_bound/ok/degraded，供 CI 冒烟与 3.9 升级验证流水线消费）+ run_manual_sync/SyncBusyError 统一入口（re-export，实现归 scheduler 单一事实源：周期与手动共用同一套通道编排）+ build_diagnostics（panel /diagnostics 薄壳化，构造逻辑归位）；附修 self_check 水位结构判定（子键缺失 = 从未运行非损坏）
+- [x] CI 接入 check --runtime + 三通道冒烟（SPEC 3.9 升级验证流水线）——ci.yml 新增 plugin job：单解释器环境（qwenpaw==2.3.0b3 + fastapi/argon2/pyjwt 并存）跑 pytest client-plugin/tests（30 passed = 21 面板 + 8 诊断 + 1 三通道端到端冒烟：进程内 uvicorn 真 server + 假 QwenPaw 数据目录（QWENPAW_WORKING_DIR 注入）+ 真 binding/collectors/uploader → 四表落库/seq=3/归属解析/未归属哨兵/90 天窗口外不报/今日透明数据断言）+ 官方 check --runtime（cwd 插件目录外 + PYTHONUTF8 固定，Windows 实测两坑带进 CI 纪律）+ node --check bundle；QwenPaw 官方发新版时改版本号重跑即升级验证（通过零动作，失败只发适配器新版）；fakes.py 测试假件公共化 + conftest 注入 server/src
 - commit: ______
 
 ## T1.15 回归验收与试点上墙

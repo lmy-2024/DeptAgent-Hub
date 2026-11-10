@@ -18,16 +18,15 @@ context.storage 不共享（QwenPaw 源码 plugins/_apps.py scope 实现）。
 
 from __future__ import annotations
 
-import platform
 from datetime import UTC, datetime
-from importlib import metadata
 
 from qwenpaw.plugins import PluginContext, StaleContextError
 from qwenpaw.plugins.apps import AppContext, HttpRequest, HttpResponse, PawApp
 
+import diagnostics
 import scheduler
 from binding import BindError, bind_device, clear_binding, get_binding
-from config import ACTIVATED_AT, PLUGIN_VERSION, REPORTING_PAUSED_FILE, STORAGE_FILES
+from config import PLUGIN_VERSION, REPORTING_PAUSED_FILE, STORAGE_FILES
 
 paw = PawApp(name="部门智通面板", app_id="deptagent-link")
 
@@ -117,8 +116,8 @@ async def post_sync(_ctx: AppContext, _req: HttpRequest) -> dict | HttpResponse:
     if _context is None:
         return _http_error(503, "plugin_unavailable", "插件尚未激活")
     try:
-        results = await scheduler.run_manual_sync(_context)
-    except scheduler.SyncBusyError:
+        results = await diagnostics.run_manual_sync(_context)
+    except diagnostics.SyncBusyError:
         return _http_error(409, "sync_busy", "同步已在进行中，请稍候")
     except StaleContextError:
         return _stale()
@@ -195,7 +194,7 @@ async def post_bind(_ctx: AppContext, req: HttpRequest) -> dict | HttpResponse:
     # 托管任务（resources.task）保证插件卸载时自动停止。
     try:
         _context.resources.task(
-            scheduler.run_manual_sync(_context), description="panel:first-sync"
+            diagnostics.run_manual_sync(_context), description="panel:first-sync"
         )
     except StaleContextError:
         return _stale()
@@ -220,62 +219,6 @@ async def get_diagnostics(_ctx: AppContext, _req: HttpRequest) -> dict | HttpRes
     if _context is None:
         return _http_error(503, "plugin_unavailable", "插件尚未激活")
     try:
-        binding = await get_binding(_context)
-        upload = await _context.storage.aread_json(
-            STORAGE_FILES["telemetry_status"], {}
-        )
-        watermark = await _context.storage.aread_json(STORAGE_FILES["watermark"], {})
-        seq = await _context.storage.aread_json(STORAGE_FILES["seq"], {})
-        today = await _context.storage.aread_json(STORAGE_FILES["today_report"], {})
-        paused_state = await _context.storage.aread_json(REPORTING_PAUSED_FILE, {})
+        return await diagnostics.build_diagnostics(_context)
     except StaleContextError:
         return _stale()
-
-    try:
-        qwenpaw_version = metadata.version("qwenpaw")
-    except metadata.PackageNotFoundError:
-        qwenpaw_version = None
-
-    channels_run = (
-        watermark.get("channels", {}) if isinstance(watermark, dict) else {}
-    )
-    fingerprints = (
-        watermark.get("usage") if isinstance(watermark, dict) else None
-    )
-    return {
-        "exported_at": _now_iso(),
-        "plugin": {
-            "id": "deptagent-link",
-            "version": PLUGIN_VERSION,
-            "activated_at": (
-                ACTIVATED_AT.isoformat() if ACTIVATED_AT is not None else None
-            ),
-        },
-        "host": {
-            "os": platform.platform() or None,
-            "qwenpaw_version": qwenpaw_version,
-        },
-        "binding": _binding_public(binding),
-        "upload": {
-            "state": upload.get("upload_state") or "idle",
-            "detail": upload.get("detail"),
-            "last_ok": upload.get("last_ok"),
-            "seq": seq.get("seq") if isinstance(seq, dict) else None,
-        },
-        "channels": {
-            name: {
-                "last_run": channels_run.get(name)
-                if isinstance(channels_run, dict)
-                else None,
-                "interval_min": minutes,
-            }
-            for name, (_label, minutes) in scheduler.CHANNEL_META.items()
-        },
-        "usage_watermark_days": (
-            len(fingerprints) if isinstance(fingerprints, dict) else 0
-        ),
-        "paused": bool(
-            isinstance(paused_state, dict) and paused_state.get("paused", False)
-        ),
-        "today": today if isinstance(today, dict) and today.get("date") else None,
-    }

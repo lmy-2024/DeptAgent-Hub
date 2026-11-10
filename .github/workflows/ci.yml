@@ -23,3 +23,40 @@ jobs:
           python -m ruff format --check src tests
       - name: Test
         run: python -m pytest
+
+  # T1.14（SPEC 3.9 升级验证流水线）：官方 check 工具链 + 三通道冒烟。
+  # 单解释器环境 = qwenpaw SDK + server 依赖并存（冒烟测试进程内起真
+  # FastAPI server）；QwenPaw 官方发新版时改下方 qwenpaw 版本号重跑，
+  # 通过零动作、失败只发适配器新版。
+  plugin:
+    runs-on: ubuntu-latest
+    env:
+      # check 工具静态读取用默认编码：固定 UTF-8（Windows GBK 坑，Linux
+      # 同纪律）；同时固定 cwd 在插件目录外（<> 路径归因陷阱）。
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "qwenpaw==2.3.0b3" \
+            "httpx>=0.27" \
+            "fastapi>=0.110" \
+            "uvicorn>=0.29" \
+            "argon2-cffi>=23.1" \
+            "pyjwt>=2.8" \
+            "pytest>=8.0" \
+            "pytest-asyncio>=1.0"
+      - name: Plugin unit tests + three-channel smoke
+        run: python -m pytest client-plugin/tests
+      - name: Official check --runtime
+        run: python -m qwenpaw.plugins.check client-plugin/deptagent-link --runtime
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Frontend bundle syntax
+        run: node --check client-plugin/deptagent-link/ui/index.js

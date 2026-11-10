@@ -24,7 +24,7 @@ import httpx
 from qwenpaw.plugins import PluginContext
 
 from binding import get_binding
-from config import STORAGE_FILES
+from config import REPORTING_PAUSED_FILE, STORAGE_FILES
 
 REPORT_TIMEOUT_SECONDS = 10
 
@@ -46,6 +46,16 @@ async def reporting_stopped(context: PluginContext) -> bool:
     """红灯检查（3.7 吊销停报）：uploader 在 401 时写入停止状态。"""
     status = await context.storage.aread_json(STORAGE_FILES["telemetry_status"], {})
     return status.get("upload_state") in STOPPED_STATES
+
+
+async def employee_paused(context: PluginContext) -> bool:
+    """员工「暂停本机上报」开关（3.4 隐私红线；缺省关闭 = 正常上报）。
+
+    语义：台账/用量通道停发，心跳继续（携带开关状态上报，服务端
+    devices.reporting_paused 置位，驾驶舱离线告警排除，3.4）。
+    """
+    state = await context.storage.aread_json(REPORTING_PAUSED_FILE, {})
+    return bool(state.get("paused", False)) if isinstance(state, dict) else False
 
 
 async def send_report(

@@ -16,6 +16,7 @@ from qwenpaw.plugins import PluginContext
 import config
 from adapters.base import detect_format
 from binding import get_binding
+from uploader import employee_paused
 
 
 def _host_version() -> str | None:
@@ -24,12 +25,6 @@ def _host_version() -> str | None:
         return metadata.version("qwenpaw")
     except metadata.PackageNotFoundError:
         return None
-
-
-async def _reporting_paused(context: PluginContext) -> bool:
-    """员工「暂停本机上报」开关（3.4 隐私红线；缺省关闭 = 正常上报）。"""
-    state = await context.storage.aread_json(config.REPORTING_PAUSED_FILE, {})
-    return bool(state.get("paused", False))
 
 
 async def collect_heartbeat(context: PluginContext) -> dict:
@@ -50,5 +45,5 @@ async def collect_heartbeat(context: PluginContext) -> dict:
         "uptime_hours": uptime_hours,
         "binding_status": "ok" if binding is not None else "unbound",
         "format_probe": fmt,
-        "reporting_paused": await _reporting_paused(context),
+        "reporting_paused": await employee_paused(context),
     }

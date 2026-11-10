@@ -10,7 +10,12 @@
   存储键在 config.STORAGE_FILES 集中声明（binding / uploader / collectors
   共用，独立模块避免相互导入成环）；
 - 红灯停报（3.7）：令牌吊销后各通道本轮直接跳过（循环存活，等重新
-  绑定后自动恢复，采集器/uploader 每轮重新读 binding）。
+  绑定后自动恢复，采集器/uploader 每轮重新读 binding）；
+- 员工暂停（3.4 隐私红线）：台账/用量通道停发，心跳继续（携带
+  reporting_paused 开关上报，服务端置位、驾驶舱离线告警排除）。
+
+面板（3.8）配套：通道元数据 CHANNEL_META、今日已上报快照
+（today_report，3.4 透明展示数据源）、手动同步入口 run_manual_sync。
 """
 
 from __future__ import annotations
@@ -22,16 +27,31 @@ from typing import Awaitable, Callable
 from qwenpaw.plugins import PluginContext, StaleContextError
 
 import config
+import state
 from collectors.agents import collect_agents
 from collectors.heartbeat import collect_heartbeat
 from collectors.usage import collect_usage, commit_usage_watermark
 from config import STORAGE_FILES
-from uploader import UploadStopped, reporting_stopped, send_report
+from uploader import UploadStopped, employee_paused, reporting_stopped, send_report
 
 # 拍板 D2（2026-11-10）：用量 / 台账 / 心跳 = 5 / 15 / 5 min
 USAGE_INTERVAL_SECONDS = 5 * 60
 AGENTS_INTERVAL_SECONDS = 15 * 60
 HEARTBEAT_INTERVAL_SECONDS = 5 * 60
+
+# 通道元数据（面板 3.8 状态卡：展示名 + 周期分钟数；panel.py 复用）
+CHANNEL_META: dict[str, tuple[str, int]] = {
+    "heartbeat": ("心跳", HEARTBEAT_INTERVAL_SECONDS // 60),
+    "agents": ("智能体台账", AGENTS_INTERVAL_SECONDS // 60),
+    "usage": ("Token 用量", USAGE_INTERVAL_SECONDS // 60),
+}
+
+
+class SyncBusyError(Exception):
+    """手动同步已在进行中（面板 3.8「立即同步」防抖）。"""
+
+
+_MANUAL_SYNC_LOCK = asyncio.Lock()
 
 
 async def start_scheduler(context: PluginContext, *, run_immediately: bool = False) -> None:
@@ -55,7 +75,7 @@ async def start_scheduler(context: PluginContext, *, run_immediately: bool = Fal
         fields={"restored_watermark": watermark, "run_immediately": run_immediately},
     )
 
-    channels: tuple[tuple[str, float, Callable[[PluginContext], Awaitable[None]]], ...] = (
+    channels: tuple[tuple[str, float, Callable[[PluginContext], Awaitable[str]]], ...] = (
         ("heartbeat", HEARTBEAT_INTERVAL_SECONDS, _run_heartbeat),
         ("agents", AGENTS_INTERVAL_SECONDS, _run_agents),
         ("usage", USAGE_INTERVAL_SECONDS, _run_usage),
@@ -71,7 +91,7 @@ async def _channel_loop(
     context: PluginContext,
     name: str,
     interval_seconds: float,
-    action: Callable[[PluginContext], Awaitable[None]],
+    action: Callable[[PluginContext], Awaitable[str]],
     *,
     immediate: bool = False,
 ) -> None:
@@ -103,26 +123,93 @@ async def _channel_loop(
                 return
 
 
+async def run_manual_sync(context: PluginContext) -> dict[str, str]:
+    """面板「立即同步」（3.8）：三通道立即各执行一轮。
+
+    语义与周期循环完全一致（员工暂停跳过台账/用量、红灯停报）；
+    与周期任务的并发安全由 state 文件锁 + seq 锁 + 服务端 UPSERT
+    幂等保证。返回各通道状态（ok / skipped_* / failed: …）。
+    """
+    if _MANUAL_SYNC_LOCK.locked():
+        raise SyncBusyError("同步已在进行中，请稍候")
+    async with _MANUAL_SYNC_LOCK:
+        results: dict[str, str] = {}
+        for name, action in (
+            ("heartbeat", _run_heartbeat),
+            ("agents", _run_agents),
+            ("usage", _run_usage),
+        ):
+            try:
+                results[name] = await action(context)
+            except StaleContextError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - 单通道失败不拖垮整轮
+                results[name] = f"failed: {exc}"
+        return results
+
+
 async def _touch_watermark(context: PluginContext, channel: str) -> None:
-    """记录通道本轮执行时间（增量水位雏形，T1.7 扩展为按日水位）。"""
-    watermark = await context.storage.aread_json(STORAGE_FILES["watermark"], {})
-    watermark[channel] = datetime.now(UTC).isoformat()
-    await context.storage.awrite_json(STORAGE_FILES["watermark"], watermark)
+    """记录通道本轮执行时间（watermark.channels 子键）。
+
+    修复（T1.13）：旧实现直接写 watermark[channel]，与 usage 通道的
+    按日指纹（collectors.usage.commit_usage_watermark 写
+    watermark["usage"]）互相覆盖——指纹被时间戳顶掉后下一轮
+    collect_usage 对字符串调 .get 抛 AttributeError，用量通道从此
+    静默失败。通道执行时间统一收纳到 channels 子键并持锁写。
+    """
+    stamp = _now_iso()
+
+    def mutate(watermark: dict) -> None:
+        channels = watermark.get("channels")
+        if not isinstance(channels, dict):
+            channels = {}
+            watermark["channels"] = channels
+        channels[channel] = stamp
+
+    await state.update_json(context, "watermark", mutate)
 
 
-async def _run_heartbeat(context: PluginContext) -> None:
-    """心跳通道（T1.5）：采集设备快照 → 上报（agents/usage 段为空）。"""
+async def _record_today(context: PluginContext, **fields: object) -> None:
+    """记录/合并「今日已上报」快照（3.4 透明展示数据源；跨日自动重置）。
+
+    日期口径与 usage stat_date 一致（员工本地日期）；面板（3.8）直接
+    读取展示，员工可见"本机今日已上报内容"。
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    def mutate(report: dict) -> None:
+        if report.get("date") != today:
+            report.clear()
+            report["date"] = today
+        report.update(fields)
+
+    await state.update_json(context, "today_report", mutate)
+
+
+async def _run_heartbeat(context: PluginContext) -> str:
+    """心跳通道（T1.5）：采集设备快照 → 上报（agents/usage 段为空）。
+
+    暂停不跳过心跳（3.4）：开关状态须随心跳上报给服务端。
+    """
     device = await collect_heartbeat(context)
-    await _send(context, device=device, agents=[], usage=[])
+    if await _send(context, device=device, agents=[], usage=[]):
+        await _record_today(context, heartbeat_sent_at=_now_iso())
+        return "ok"
+    return "skipped_stopped"  # 红灯/吊销（3.7 正常停报状态）
 
 
-async def _run_agents(context: PluginContext) -> None:
+async def _run_agents(context: PluginContext) -> str:
     """台账通道（T1.6）：采集智能体快照 → 上报（采集器当前占位返空）。"""
+    if await employee_paused(context):
+        return "skipped_paused"
     agents = await collect_agents(context)
-    await _send(context, device={}, agents=agents, usage=[])
+    if await _send(context, device={}, agents=agents, usage=[]):
+        await _record_today(context, agents_count=len(agents), agents_sent_at=_now_iso())
+        return "ok"
+    return "skipped_stopped"
 
 
-async def _run_usage(context: PluginContext) -> None:
+async def _run_usage(context: PluginContext) -> str:
     """用量通道（T1.7）：采集增量用量 → 上报 → 成功后提交按日指纹水位。
 
     增量算法（SPEC 3.6）：当日全量重传（服务端 UPSERT 覆盖）、历史日
@@ -130,11 +217,24 @@ async def _run_usage(context: PluginContext) -> None:
     水位，下轮自动重传（丢数据风险 < 重复上报的幂等覆盖）；本地无新
     数据本轮静默（在线信号由心跳通道维持）。
     """
+    if await employee_paused(context):
+        return "skipped_paused"
     usage, fingerprints = await collect_usage(context)
     if not usage:
-        return
+        return "skipped_no_data"
     if await _send(context, device={}, agents=[], usage=usage):
         await commit_usage_watermark(context, fingerprints)
+        # 今日已上报快照（3.4 透明展示）：只记当日行（历史日回灌不属于"今日"）
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_rows = [row for row in usage if row.get("stat_date") == today]
+        await _record_today(
+            context,
+            usage_rows=today_rows,
+            usage_tokens=_tokens_of(today_rows),
+            usage_sent_at=_now_iso(),
+        )
+        return "ok"
+    return "skipped_stopped"
 
 
 async def _send(
@@ -162,3 +262,25 @@ async def _send(
             return False
         return False
     return True
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+_TOKEN_FIELDS = (
+    "prompt_tokens",
+    "completion_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+)
+
+
+def _tokens_of(rows: list[dict]) -> int:
+    """今日已上报 token 总数（六项计数中四个 token 字段之和）。"""
+    total = 0
+    for row in rows:
+        for field in _TOKEN_FIELDS:
+            value = row.get(field, 0) or 0
+            total += value if isinstance(value, int) else 0
+    return total

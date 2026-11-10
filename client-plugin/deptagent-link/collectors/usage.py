@@ -20,6 +20,7 @@ from qwenpaw.plugins import PluginContext
 
 from adapters.base import detect_format
 from config import STORAGE_FILES
+import state
 
 # D3 拍板：回灌深度 90 天（窗口外日期不报也不记水位）
 USAGE_BACKFILL_DAYS = 90
@@ -44,7 +45,10 @@ async def collect_usage(
     if not daily:
         return [], {}
     watermark = await context.storage.aread_json(STORAGE_FILES["watermark"], {})
-    known: dict = watermark.get("usage", {})
+    # 防御旧版本 bug 产物（watermark["usage"] 曾被通道时间戳覆盖成字符串）
+    known = watermark.get("usage") if isinstance(watermark, dict) else None
+    if not isinstance(known, dict):
+        known = {}
 
     # 员工本地日期（1.5：stat_date 客户端生成，服务器不做时区换算）
     today = datetime.now().strftime("%Y-%m-%d")
@@ -69,10 +73,16 @@ async def collect_usage(
 async def commit_usage_watermark(
     context: PluginContext, fingerprints: dict[str, str]
 ) -> None:
-    """上报成功后提交用量水位（指纹只含 90 天窗口内日期，自然滚动）。"""
-    watermark = await context.storage.aread_json(STORAGE_FILES["watermark"], {})
-    watermark["usage"] = fingerprints
-    await context.storage.awrite_json(STORAGE_FILES["watermark"], watermark)
+    """上报成功后提交用量水位（指纹只含 90 天窗口内日期，自然滚动）。
+
+    经 state.update_json 持锁读-改-写：与通道执行时间戳（scheduler
+    写 watermark.channels）及其他写方并发安全。
+    """
+
+    def mutate(watermark: dict) -> None:
+        watermark["usage"] = fingerprints
+
+    await state.update_json(context, "watermark", mutate)
 
 
 def _fingerprint(day_rows: list[dict]) -> str:

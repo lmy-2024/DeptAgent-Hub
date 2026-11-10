@@ -90,9 +90,9 @@
 - commit: ______
 
 ## T1.13 员工面板（插件内）
-- [ ] 按 D8 拍板路径实现：entry.frontend JS bundle + console 插槽/路由/菜单（SPEC 3.8、决策点 D8）
-- [ ] 状态卡：绑定信息/三通道信号灯/今日上报数；操作：立即同步/暂停上报/重新绑定/诊断导出（SPEC 3.8）
-- [ ] 顶部常驻隐私承诺 + "今日已上报内容"透明展示（SPEC 3.4）
+- [x] 按 D8 拍板路径实现：entry.frontend JS bundle + console 插槽/路由/菜单（SPEC 3.8、决策点 D8）——plugin.json entry.frontend=ui/index.js（529 行 IIFE，React/antd 取 window.QwenPaw.host 免重复打包）+ registerRoutes("/plugin/deptagent-link/panel")（非 /apps/ 前缀 → 设置区插件分组，即「QwenPaw 设置内一页」）；数据层 PawApp（app_id=deptagent-link，六端点挂 /api/deptagent-link/*，qwenpaw.plugins.apps 在 PUBLIC_API 白名单内）；console 启动时 usePluginLoader 按需动态加载
+- [x] 状态卡：绑定信息/三通道信号灯/今日上报数；操作：立即同步/暂停上报/重新绑定/诊断导出（SPEC 3.8）——GET /status（binding 脱敏无 device_token + 三通道 last_run + today_report）；POST /sync（run_manual_sync 锁防抖 + busy→409）/ /pause（reporting_paused.json 开关：agents/usage 停发、心跳继续携状态，3.4 红线）/ /rebind（clear_binding 连带清 telemetry_status，红灯复位不永久拦截新令牌）/ /diagnostics（快照导出 JSON）；顺带修 scheduler watermark 覆盖 bug（usage 按日指纹被时间戳顶掉 → channels 子键 + state.py 文件锁多写方并发保护 + collect 防御 + commit 自愈）；单测 21 passed + check --runtime 全绿
+- [x] 顶部常驻隐私承诺 + "今日已上报内容"透明展示（SPEC 3.4）——Alert 常驻（不上传对话内容/记忆/文件/提示词文本/剪贴板）+ 今日已上报 Statistic×3 + 明细 Table（agent/provider/model/tokens/calls，today_report.json 跨日重置）；真机宿主实测：热装后浏览器 8/8（面板渲染/绑定成功/首次全量上报 1 秒完成 514,678 tokens/手动同步 ok×3/暂停开关/诊断导出下载）+ server 侧 users+devices+agents+usage_daily 四表落库 + 邀请码一次性消费 + last_seq 持续心跳
 - commit: ______
 
 ## 收口

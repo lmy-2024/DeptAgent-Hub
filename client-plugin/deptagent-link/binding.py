@@ -100,6 +100,12 @@ async def get_binding(context: PluginContext) -> dict | None:
 
 
 async def clear_binding(context: PluginContext) -> None:
-    """清除绑定（重新绑定第一步；对应 3.8 面板"重新绑定"操作）。"""
+    """清除绑定（重新绑定第一步；对应 3.8 面板"重新绑定"操作）。
+
+    一并清除红灯状态（telemetry_status）：红灯语义 = 等待重新绑定
+    （3.7 吊销停报），不清除会让 reporting_stopped 永久拦截新
+    令牌的上报。
+    """
     await context.storage.adelete(STORAGE_FILES["binding"])
+    await context.storage.adelete(STORAGE_FILES["telemetry_status"])
     context.logger.info("deptagent-link binding cleared")

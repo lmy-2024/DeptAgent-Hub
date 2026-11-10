@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
-import { login, setToken } from "../api/client";
+import { getSession, isSessionExpired, login, setSession } from "../api/client";
 
-/** 登录页（SPEC 4.2：0 端点 → 1 页面）。阶段 0 为可用最小版，T1.8 补全（过期处理/错误文案/锁定提示）。 */
+/** 登录页（SPEC 4.2 页面地图：账号密码；错误文案 8.5 auth_failed）。 */
 export default function LoginPage() {
   const navigate = useNavigate();
   const [employeeNo, setEmployeeNo] = useState("");
@@ -11,16 +11,28 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // 已持有效会话：无需重复登录，直达首页（路由守卫对偶）
+  if (!isSessionExpired(getSession())) {
+    return <Navigate to="/" replace />;
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const { token } = await login(employeeNo, password);
-      setToken(token);
-      navigate("/");
-    } catch (message) {
-      setError(String(message));
+      const resp = await login(employeeNo, password);
+      // 401 auth_failed（工号或密码不正确 / 失败次数过多已临时锁定）文案
+      // 由 login() 原样抛出，此处直接展示（SPEC 8.5 中文 message）
+      setSession({
+        token: resp.token,
+        expires_at: resp.expires_at,
+        role: resp.role,
+        display_name: resp.display_name,
+      });
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -36,6 +48,7 @@ export default function LoginPage() {
             value={employeeNo}
             onChange={(e) => setEmployeeNo(e.target.value)}
             autoComplete="username"
+            autoFocus
             style={{ display: "block", width: "100%", margin: "4px 0 12px", padding: 8 }}
           />
         </label>
@@ -56,7 +69,11 @@ export default function LoginPage() {
         >
           {busy ? "登录中…" : "登录"}
         </button>
-        {error && <p style={{ color: "#dc2626" }}>{error}</p>}
+        {error && (
+          <p role="alert" style={{ color: "#dc2626", margin: "12px 0 0" }}>
+            {error}
+          </p>
+        )}
       </form>
     </div>
   );

@@ -5,7 +5,8 @@
 
 ## 当前状态
 - 阶段：1（MVP 竖切）
-- 当前任务：T1.7 用量通道完成；下一步 T1.8 console 登录页（表单 + JWT 处理 + 401 提示）
+- 当前任务：T1.8 登录页完成；下一步 T1.9 员工与设备页（员工列表 + 邀请码 UI + 令牌吊销）
+- 后挂事项：T1.7/T1.8 待推送——GitHub 直连阻断（UAC 弹窗被取消，网络间歇性抖动），每轮 commit 后重试
 - 最后更新：2026-11-10
 
 ## 已完成
@@ -22,6 +23,7 @@
 - [x] T1.5 心跳通道：插件 collectors/heartbeat.py（3.4 ①全 8 字段含 reporting_paused 隐私开关）+ uploader.py（seq 自增 async.Lock 防三通道交错 + 401 红灯停报 + 409 seq 重置）+ config.py（STORAGE_FILES 集中声明解导入环，PLUGIN_VERSION/ACTIVATED_AT 共享）；服务端 _store_heartbeat（7.1 白名单 7 列 COALESCE 宽松语义）；吊销链路端到端实测通过（真 server + 真 uploader：吊销→401 token_revoked→UploadStopped→telemetry_status 写 revoked→红灯检查 True）；单测 46→48 全绿 + check --runtime 全绿
 - [x] T1.6 台账通道：插件 adapters/{base,qwenpaw_2_3}.py（3.12 包结构落地：working_dir 定位复刻宿主 constant.py 优先级 + AgentReader 协议 + detect_format 降级判定；2.3 格式族读真机 config.json agents.profiles + workspace agent.json 仅取 name/description/enabled）+ collectors/agents.py（asyncio.to_thread 文件 IO）；服务端迁移 003 agents 表 + _store_agents UPSERT（8.1 归属：owner=令牌对应员工、维护人默认同创建人；7.1 白名单：客户端只可更新 name/description/last_seen，status INSERT 首写 new、blocked 永不被覆盖；多员工同名 key 各自成行）；心跳 format_probe 接真实探测；端到端冒烟：真机双智能体全链路落库；单测 48→50 全绿 + check --runtime 全绿；4ae8241+a50bd7c 网络自愈后已推送（1ed99b8..a50bd7c）
 - [x] T1.7 用量通道：插件 collectors/usage.py（3.6 增量算法：当日全量重传 + 历史日 md5 指纹变化重传，上报成功才 commit 水位，90 天窗口外不报不记）+ adapters read_usage（真机 token_usage.json {date: {key: {...}}}，旧记录无 agent_id/cache_* 归一）+ scheduler 三通道接真实增量；服务端迁移 004 usage_daily 表 + usage_report VIEW（7.2 双 source 合并）+ _store_usage（归属解析仅限本人台账、agent_id=0 哨兵、team INSERT 首写快照、provider/model None 归一空串防 UNIQUE NULL 不判重）；端到端冒烟：真机今日 3 条上报落库 + 103 天前窗口外跳过 + 两轮重传幂等；单测 50→54 全绿 + check --runtime 全绿
+- [x] T1.8 console 登录页：client.ts 重构（Session 对象存 localStorage：token/expires_at/role/display_name + isSessionExpired 主动过期检查 + login 请求 auth:false 不走全局 401 跳转——登录失败文案直抛表单）+ LoginPage（服务端 8.5 中文文案展示）+ RequireAuth 路由守卫（未登录/过期 → /login；有效会话访问 /login → /）+ AppLayout（用户信息 + 退出登录）；浏览器三场景实测（守卫/失败文案/成功+退出）+ 锁定文案链路验证全过；tsc + vite build 全过
 
 ## 卡点 / 待拍板（SPEC 15 章）
 - 已拍板（2026-11-10，用户授权按倾向值落定）：D1 插件命名 deptagent-link、D2 上报频率 5/15/5 min（用量/台账/心跳）、D3 回灌深度台账全量+用量 90 天、D5 员工仅插件面板、D7 注册模式 closed、D8 官方前端插件（PawApp 数据层）、D11 Argon2id（既成实现）；此前 D6 License=Apache-2.0

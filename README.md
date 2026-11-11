@@ -215,10 +215,13 @@ client-plugin/
   tests/                插件单测 + 三通道端到端冒烟
 docs/
   SPEC.md               需求与验收口径的唯一事实来源
+  architecture.md       工程架构详解（组件/数据流/机制/扩展点）
   tasks/stage-1-mvp.md  阶段 1 任务与验收记录
   status.md             当前进度与卡点
   images/               README 截图
 ```
+
+想深入了解内部设计（分层、数据模型、上报时序、权限实现、二次开发扩展点），见 **[docs/architecture.md](docs/architecture.md)**。
 
 ## 路线图
 

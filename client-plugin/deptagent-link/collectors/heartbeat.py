@@ -35,7 +35,8 @@ async def collect_heartbeat(context: PluginContext) -> dict:
         uptime_hours = round(delta.total_seconds() / 3600, 2)
 
     binding = await get_binding(context)
-    # 格式探测（adapters/base.py）：探测失败 None（服务端 COALESCE 不覆盖旧值，降级留痕）
+    # 格式探测（adapters/base.py）：探测失败上报显式 format_mismatch 事件
+    # （3.7）——服务端 COALESCE 不覆盖 None，只有字符串才能把降级落库可见
     fmt, _reader = await asyncio.to_thread(detect_format)
     return {
         "name": platform.node() or None,
@@ -44,6 +45,6 @@ async def collect_heartbeat(context: PluginContext) -> dict:
         "plugin_version": config.PLUGIN_VERSION,
         "uptime_hours": uptime_hours,
         "binding_status": "ok" if binding is not None else "unbound",
-        "format_probe": fmt,
+        "format_probe": fmt or "format_mismatch",
         "reporting_paused": await employee_paused(context),
     }

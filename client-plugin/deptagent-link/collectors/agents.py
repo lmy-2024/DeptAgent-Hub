@@ -15,12 +15,16 @@ from qwenpaw.plugins import PluginContext
 from adapters.base import detect_format
 
 
-async def collect_agents(context: PluginContext) -> list[dict]:
-    """采集台账快照（8.1 agents 段；格式不匹配/读取失败 → 空列表降级）。"""
+async def collect_agents(context: PluginContext) -> list[dict] | None:
+    """采集台账快照（8.1 agents 段）。
+
+    格式不匹配/探测失败 → None（降级为仅心跳，3.7：不采集也不上报）；
+    正常但本地无智能体 → []（有效空清单）。
+    """
     fmt, reader = detect_format()
     if reader is None or fmt is None:
         context.logger.info(
             "deptagent-link agents: format not detected, skip round",
         )
-        return []
+        return None
     return await asyncio.to_thread(reader.read_agents)

@@ -199,10 +199,16 @@ async def _run_heartbeat(context: PluginContext) -> str:
 
 
 async def _run_agents(context: PluginContext) -> str:
-    """台账通道（T1.6）：采集智能体快照 → 上报（采集器当前占位返空）。"""
+    """台账通道（T1.6）：采集智能体快照 → 上报。
+
+    采集器返回 None = 格式探测失败（3.7 降级链）：不采集也不上报，
+    降级为仅心跳（3.11-4 验收口径）。
+    """
     if await employee_paused(context):
         return "skipped_paused"
     agents = await collect_agents(context)
+    if agents is None:
+        return "skipped_degraded"
     if await _send(context, device={}, agents=agents, usage=[]):
         await _record_today(context, agents_count=len(agents), agents_sent_at=_now_iso())
         return "ok"

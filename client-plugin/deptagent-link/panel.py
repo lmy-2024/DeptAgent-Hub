@@ -18,6 +18,7 @@ context.storage 不共享（QwenPaw 源码 plugins/_apps.py scope 实现）。
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from qwenpaw.plugins import PluginContext, StaleContextError
@@ -25,6 +26,7 @@ from qwenpaw.plugins.apps import AppContext, HttpRequest, HttpResponse, PawApp
 
 import diagnostics
 import scheduler
+from adapters.base import detect_format
 from binding import BindError, bind_device, clear_binding, get_binding
 from config import PLUGIN_VERSION, REPORTING_PAUSED_FILE, STORAGE_FILES
 
@@ -82,12 +84,22 @@ async def get_status(_ctx: AppContext, _req: HttpRequest) -> dict | HttpResponse
     except StaleContextError:
         return _stale()
 
+    # 采集层格式探测（3.7 降级链）：失败 → 面板黄灯（仅心跳上报中）
+    fmt, _reader = await asyncio.to_thread(detect_format)
+
     channels_run = (
         watermark.get("channels", {}) if isinstance(watermark, dict) else {}
     )
     return {
         "plugin_version": PLUGIN_VERSION,
         "binding": _binding_public(binding),
+        "collect": {
+            "degraded": fmt is None,
+            "format": fmt,
+            "detail": (
+                None if fmt is not None else "数据格式不兼容：已降级为仅心跳上报"
+            ),
+        },
         "upload": {
             "state": upload.get("upload_state") or "idle",
             "detail": upload.get("detail"),

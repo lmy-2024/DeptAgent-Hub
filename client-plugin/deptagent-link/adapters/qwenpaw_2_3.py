@@ -53,7 +53,12 @@ class QwenPaw23Reader:
     """2.3 格式族 Reader（工作区注册表 + agent.json 元数据）。"""
 
     def probe_format(self) -> str | None:
-        """探测：工作目录存在且 config.json 有 agents.profiles 结构。"""
+        """探测：工作目录 + config.json agents.profiles + token 用量文件可读。
+
+        token_usage.json **缺失 = 尚未产生用量（正常）**；存在但解析失败
+        = 数据格式不兼容（3.7 降级链入口；3.11-4 验收口径：篡改 token
+        文件模拟上游改格式）。
+        """
         root = working_dir()
         if not root.is_dir():
             return None
@@ -62,6 +67,9 @@ class QwenPaw23Reader:
             return None
         agents_section = config.get("agents")
         if not isinstance(agents_section, dict) or "profiles" not in agents_section:
+            return None
+        token_path = _token_usage_path()
+        if token_path.exists() and not isinstance(_read_json(token_path), dict):
             return None
         return FORMAT_2_3
 

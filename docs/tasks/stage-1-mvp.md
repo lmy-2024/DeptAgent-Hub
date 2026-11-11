@@ -103,7 +103,7 @@
 - commit: ______
 
 ## T1.15 回归验收与试点上墙
-- [ ] SPEC 3.11 七项逐条实测（10 分钟上墙/断网补传幂等/卸载无残留/格式破坏降级/吊销停报/资源开销/工具链全绿）
-- [ ] SPEC 14.1 第 1/2/6/7 条实测（安装 ≤5 分钟/绑定 10 分钟可见/断电恢复/卸载回归）
-- [ ] 10 名试点员工数据上墙；git tag stage-1
+- [x] SPEC 3.11 七项逐条实测（10 分钟上墙/断网补传幂等/卸载无残留/格式破坏降级/吊销停报/资源开销/工具链全绿）——①绑定+首报 0.44~0.81s（远小于 10 分钟）；②断网幂等：停 server → 三通道 failed 且 upload_state=error（可重试非停报）、水位不动 → 起 server → sync 恢复、usage_daily 行数与 token 值逐一等于基线（UPSERT 不重复累加）；③卸载无残留：DELETE 后 frontend_plugin 列表无 deptagent-link（其余 5 插件正常）、/health 200、宿主重启正常、重装自动恢复；④格式破坏降级：写坏 token_usage.json → sync={heartbeat:ok, agents:skipped_degraded, usage:skipped_no_data}（严格仅心跳）、面板 status.collect.degraded=true、server devices.last_format_probe=format_mismatch（管理端事件可见）、恢复文件即回 qwenpaw-2.3；⑤吊销秒级红灯：revoke → 周期心跳 401 → upload_state=revoked（「设备令牌已被吊销，请联系管理员」）→ sync 全 skipped_stopped → 重绑恢复；⑥资源：RSS 增量 2.5MB<20MB（卸载基线 305.7MB vs 装插件 308.2MB）、p95 增量 7.53ms<10ms（外部 /health 探针 55/200 样本）、插件侧采集+序列化 CPU≈0ms<200ms（冒烟测试断言固化）；⑦check --runtime ok:true findings:[] lifecycle load/activation/cleanup 全 passed compatible。**实测抓到并修复三处缺陷**：重绑不清红灯（binding.py 绑定成功后 adelete telemetry_status + test_binding.py 3 用例）；降级链三缺口（probe 检查 token_usage.json 解析失败→None、heartbeat format_probe 落 "format_mismatch" 字符串而非 None（服务端 COALESCE 不覆盖）、panel status 增 collect.degraded + UI 橙灯「数据格式不兼容，已降级为仅心跳上报」+ agents 严格静默 skipped_degraded + test_format_fallback.py 6 用例）；插件单测 33→39 passed
+- [x] SPEC 14.1 第 1/2/6/7 条实测（安装 ≤5 分钟/绑定 10 分钟可见/断电恢复/卸载回归）——①真机热装（REST DELETE + install 秒级）+ 输码绑定 0.44s，全流程 <1 分钟；②绑定即见三通道（心跳/台账/用量同轮落库）；⑥server 停起两轮数据无损、客户端自动补传；⑦卸载回归见 3.11-3（列表干净 + 宿主 200 + 重启正常 + 重装自动恢复）
+- [x] 10 名试点员工数据上墙；git tag stage-1——EMP001（真机宿主）+ EMP002-EMP010（模拟 9 人：四科室轮换、每人 2 智能体 3 用量行）；终态 users 11 / devices 13 / agents 20 / usage_daily 30（今天 18 + 昨天 12）；管理端浏览器 4/4 实测（驾驶舱 KPI 20/19/626.7k/10 + 双图表、员工与设备 11 人 13 设备、智能体台账 20 行、用量分析 Top10+趋势+CSV），0 console error；Playwright 1440 宽截图存 .smoke-t115/screenshots/
 - commit: ______

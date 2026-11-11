@@ -87,6 +87,10 @@ async def bind_device(
         "bound_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
     await context.storage.awrite_json(STORAGE_FILES["binding"], binding)
+    # 绑定成功 = 新令牌生效：清除红灯状态（telemetry_status）。
+    # 红灯（revoked/invalid）的解除路径就是重新绑定；残留会拦 reporting_stopped，
+    # 新令牌的首轮上报被 skipped_stopped 全部跳过（T1.15 真机验收抓到）。
+    await context.storage.adelete(STORAGE_FILES["telemetry_status"])
     context.logger.info(
         "deptagent-link bound",
         fields={"employee_no": employee_no, "server_url": binding["server_url"]},

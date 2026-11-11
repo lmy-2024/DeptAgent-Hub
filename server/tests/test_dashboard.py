@@ -12,7 +12,25 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-TODAY = "2026-11-10"
+TODAY = datetime.now().date()
+
+# 造数日的相对偏移（原 T1.12 场景锚定 2026-11-10：10-15/11-02/11-09/11-10）。
+# T1.15 回归实测发现写死日期会随真实日期腐化（30 天窗口滑动后窗口起点断言先坏），
+# 改为相对 TODAY 生成，场景语义（含窗口内最近日 + 跨月日 + 无数据日）不变。
+D1 = TODAY - timedelta(days=26)  # 窗口内最早数据日（原 10-15）
+D2 = TODAY - timedelta(days=8)  # 跨月候选日（原 11-02）
+D3 = TODAY - timedelta(days=1)  # 昨日（原 11-09）
+ZHANG_DAILY_TOKENS = {D1: 1500, D2: 1200, D3: 3000, TODAY: 1500}  # 财务周报四日
+LI_DAILY_TOKENS = {TODAY: 2000}  # 李四一日
+
+
+def _month_tokens(daily: dict) -> int:
+    """当月（TODAY 所在月）token 合计（month_tokens KPI 同口径）。"""
+    month = TODAY.strftime("%Y-%m")
+    return sum(t for d, t in daily.items() if d.strftime("%Y-%m") == month)
+
+
+EXPECTED_MONTH_TOKENS = _month_tokens(ZHANG_DAILY_TOKENS) + _month_tokens(LI_DAILY_TOKENS)
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -97,7 +115,7 @@ def dashboard_world(client, super_token, db):
             ],
             "usage": [
                 {
-                    "stat_date": "2026-10-15",
+                    "stat_date": D1.isoformat(),
                     "agent_key": "finance-report",
                     "provider_id": "dashscope",
                     "model": "qwen-max",
@@ -106,7 +124,7 @@ def dashboard_world(client, super_token, db):
                     "call_count": 10,
                 },
                 {
-                    "stat_date": "2026-11-02",
+                    "stat_date": D2.isoformat(),
                     "agent_key": "finance-report",
                     "provider_id": "dashscope",
                     "model": "qwen-max",
@@ -115,7 +133,7 @@ def dashboard_world(client, super_token, db):
                     "call_count": 8,
                 },
                 {
-                    "stat_date": "2026-11-09",
+                    "stat_date": D3.isoformat(),
                     "agent_key": "finance-report",
                     "provider_id": "dashscope",
                     "model": "qwen-max",
@@ -124,7 +142,7 @@ def dashboard_world(client, super_token, db):
                     "call_count": 20,
                 },
                 {
-                    "stat_date": "2026-11-10",
+                    "stat_date": TODAY.isoformat(),
                     "agent_key": "finance-report",
                     "provider_id": "dashscope",
                     "model": "qwen-max",
@@ -147,7 +165,7 @@ def dashboard_world(client, super_token, db):
             "agents": [{"agent_key": "hr-helper", "name": "人事问答助手"}],
             "usage": [
                 {
-                    "stat_date": "2026-11-10",
+                    "stat_date": TODAY.isoformat(),
                     "agent_key": "hr-helper",
                     "provider_id": "dashscope",
                     "model": "qwen-plus",
@@ -213,8 +231,8 @@ def test_dashboard_kpis(client, lead_token, dashboard_world):
     assert body["agents_total"] == 3  # finance-report / data-clean / hr-helper
     assert body["agents_active_30d"] == 2  # finance-report / hr-helper（近 30 天有用量）
     assert body["employees_active_30d"] == 2  # 张三 / 李四（王五无用量）
-    # 本月（2026-11）：张三 5700 + 李四 2000（10-15 的 1500 属上月）
-    assert body["month_tokens"] == 7700
+    # 本月 = TODAY 所在月（动态：跨月偏移日不计入）
+    assert body["month_tokens"] == EXPECTED_MONTH_TOKENS
 
 
 # ---- 离线设备告警（4.2 / 3.4：排除 reporting_paused=1）----
@@ -244,13 +262,13 @@ def test_dashboard_trend_and_team_top(client, lead_token, dashboard_world):
     trend = body["trend"]
     assert len(trend) == 30
     dates = [p["date"] for p in trend]
-    assert dates[0] == "2026-10-12" and dates[-1] == TODAY
+    assert dates[0] == (TODAY - timedelta(days=29)).isoformat() and dates[-1] == TODAY.isoformat()
     assert dates == sorted(dates)  # 连续升序（补零后无缺口）
     by_date = {p["date"]: p["total_tokens"] for p in trend}
-    assert by_date["2026-10-15"] == 1500
-    assert by_date["2026-11-10"] == 3500  # 张三 1500 + 李四 2000
-    assert by_date["2026-11-05"] == 0  # 无数据日补零
-    assert sum(by_date.values()) == 9200  # 窗口内全量（30 天含 10-15）
+    assert by_date[D1.isoformat()] == 1500
+    assert by_date[TODAY.isoformat()] == 3500  # 张三 1500 + 李四 2000（重叠日 = TODAY）
+    assert by_date[(TODAY - timedelta(days=5)).isoformat()] == 0  # 无数据日补零
+    assert sum(by_date.values()) == 9200  # 窗口内全量（30 天含 D1）
 
     assert body["team_top"] == [
         {"team": "财务科", "total_tokens": 7200},

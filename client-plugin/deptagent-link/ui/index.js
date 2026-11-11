@@ -77,8 +77,11 @@
     return isNaN(d.getTime()) ? String(iso) : d.toLocaleString();
   }
 
-  function uploadLight(upload, paused) {
+  function uploadLight(upload, paused, collect) {
     if (paused) return { color: "blue", text: "已暂停上报（心跳保持）" };
+    // 采集层降级（3.7）：格式不兼容 → 黄灯（仅心跳上报中）
+    if (collect && collect.degraded)
+      return { color: "orange", text: "数据格式不兼容，已降级为仅心跳上报" };
     var s = (upload && upload.state) || "idle";
     if (s === "ok") return { color: "green", text: "上报正常" };
     if (s === "error") return { color: "orange", text: "上报异常，自动重试中" };
@@ -345,7 +348,7 @@
       );
     }
 
-    var light = uploadLight(data.upload, data.paused);
+    var light = uploadLight(data.upload, data.paused, data.collect);
     var today = data.today || {};
     var usageRows = today.usage_rows || [];
 

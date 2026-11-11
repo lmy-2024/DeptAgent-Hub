@@ -163,6 +163,26 @@ async def test_smoke_three_channels_end_to_end(
     # 2. 三通道手动同步（真 collectors → 真 uploader → 真 server）
     results = await diagnostics.run_manual_sync(context)
     assert results == {"heartbeat": "ok", "agents": "ok", "usage": "ok"}
+    # 3.11-6 同进程可测口径：单次上报的**插件侧** CPU（采集 + 序列化；
+    # 不含同进程 server 的处理）< 200ms。注：注入的同进程 server 与
+    # 插件共享 CPU 时间，整段 process_time（≈report_cpu_seconds）会把
+    # SQLite/FastAPI 侧也算进来，故插件负载单独度量。
+    from collectors import agents as agents_mod
+    from collectors import heartbeat as heartbeat_mod
+    from collectors import usage as usage_mod
+
+    plugin_cpu_before = time.process_time()
+    device_payload = await heartbeat_mod.collect_heartbeat(context)
+    agents_payload = await agents_mod.collect_agents(context)
+    usage_payload, _ = await usage_mod.collect_usage(context)
+    json.dumps(
+        {"device": device_payload, "agents": agents_payload, "usage": usage_payload}
+    )
+    plugin_cpu_seconds = time.process_time() - plugin_cpu_before
+    print(f"plugin-side report cpu: {plugin_cpu_seconds * 1000:.1f}ms")  # 3.11-6 取证
+    assert plugin_cpu_seconds < 0.2, (
+        f"plugin-side report cpu {plugin_cpu_seconds * 1000:.1f}ms exceeds 200ms"
+    )
 
     # 3. 今日透明数据已记录（3.4：员工可见"本机今日已上报内容"）
     today_report = await context.storage.aread_json(
